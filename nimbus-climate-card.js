@@ -1,7 +1,7 @@
 // Nimbus Climate Card v1.3.0
 // A Home Assistant Lovelace card for climate entities
 
-const CARD_VERSION = '1.3.0';
+const CARD_VERSION = '1.3.1';
 const NIMBUS_GRID_ROW_HEIGHT = 56;
 const NIMBUS_GRID_ROW_GAP = 8;
 const NIMBUS_GRID_ROW_PADDING = 4;
@@ -422,6 +422,9 @@ class NimbusClimateCard extends HTMLElement {
       clearInterval(this._historyInterval);
       this._historyInterval = null;
     }
+    // A +/- button held when the card is removed (tab/dashboard switch)
+    // would otherwise keep firing set_temperature forever on a detached card.
+    this._stopHold();
   }
 
   setConfig(config) {
@@ -619,6 +622,8 @@ class NimbusClimateCard extends HTMLElement {
   _stopHold() {
     clearTimeout(this._holdTimer);
     clearInterval(this._holdInterval);
+    this._holdTimer = null;
+    this._holdInterval = null;
   }
 
   _fetchHistory(entityId) {
@@ -895,6 +900,7 @@ class NimbusClimateCard extends HTMLElement {
       btnUp.addEventListener('mouseup',    () => this._stopHold());
       btnUp.addEventListener('mouseleave', () => this._stopHold());
       btnUp.addEventListener('touchend',   () => this._stopHold());
+      btnUp.addEventListener('touchcancel',() => this._stopHold());
     }
     if (btnDown) {
       btnDown.addEventListener('mousedown',  () => this._startHold(-step));
@@ -902,6 +908,7 @@ class NimbusClimateCard extends HTMLElement {
       btnDown.addEventListener('mouseup',    () => this._stopHold());
       btnDown.addEventListener('mouseleave', () => this._stopHold());
       btnDown.addEventListener('touchend',   () => this._stopHold());
+      btnDown.addEventListener('touchcancel',() => this._stopHold());
     }
     const humUp   = this.shadowRoot.getElementById('hum-up');
     const humDown = this.shadowRoot.getElementById('hum-down');
