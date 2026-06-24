@@ -383,6 +383,91 @@ const CSS = `
 
 const _safeNum = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
 
+const _historyTimeMs = (row) => {
+  const raw = row?.lu ?? row?.last_updated ?? row?.last_changed;
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw)) return null;
+    return raw < 1e12 ? raw * 1000 : raw;
+  }
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+// Convert recorder state changes into time-weighted 30-minute samples. A
+// one-minute sensor dip then occupies one minute of its bucket instead of the
+// same horizontal width as a twelve-hour plateau.
+const _resampleTempHistory = (rows, startMs, endMs, bucketCount = 48) => {
+  if (!(endMs > startMs) || bucketCount < 2) return [];
+  const events = (rows || [])
+    .map((row) => ({
+      t: _historyTimeMs(row),
+      v: _safeNum(row?.s ?? row?.state),
+    }))
+    .filter((event) => Number.isFinite(event.t) && event.t <= endMs)
+    .sort((a, b) => a.t - b.t);
+  if (!events.length) return [];
+
+  // The recorder can return multiple updates at the same timestamp. The last
+  // one is authoritative and avoids zero-duration spikes.
+  const compact = [];
+  for (const event of events) {
+    if (compact.length && compact[compact.length - 1].t === event.t) {
+      compact[compact.length - 1] = event;
+    } else {
+      compact.push(event);
+    }
+  }
+
+  const step = (endMs - startMs) / bucketCount;
+  const points = [];
+  let eventIndex = 0;
+  let currentValue = null;
+
+  for (let i = 0; i < bucketCount; i++) {
+    const bucketStart = startMs + i * step;
+    const bucketEnd = i === bucketCount - 1 ? endMs : bucketStart + step;
+    while (eventIndex < compact.length && compact[eventIndex].t <= bucketStart) {
+      currentValue = compact[eventIndex].v;
+      eventIndex++;
+    }
+
+    let cursor = bucketStart;
+    let weightedValue = 0;
+    let validDuration = 0;
+    let nextIndex = eventIndex;
+    let value = currentValue;
+
+    while (nextIndex < compact.length && compact[nextIndex].t < bucketEnd) {
+      const changeAt = Math.max(cursor, compact[nextIndex].t);
+      if (Number.isFinite(value) && changeAt > cursor) {
+        const duration = changeAt - cursor;
+        weightedValue += value * duration;
+        validDuration += duration;
+      }
+      cursor = changeAt;
+      value = compact[nextIndex].v;
+      nextIndex++;
+    }
+    if (Number.isFinite(value) && bucketEnd > cursor) {
+      const duration = bucketEnd - cursor;
+      weightedValue += value * duration;
+      validDuration += duration;
+    }
+
+    eventIndex = nextIndex;
+    currentValue = value;
+    if (validDuration > 0) {
+      points.push({ t: (bucketStart + bucketEnd) / 2, v: weightedValue / validDuration });
+    }
+  }
+
+  // Pin the right edge to the latest real reading rather than the final
+  // bucket average, so it agrees with the numeric current-temperature label.
+  const latest = [...compact].reverse().find((event) => event.t <= endMs && Number.isFinite(event.v));
+  if (latest) points.push({ t: endMs, v: latest.v });
+  return points;
+};
+
 class NimbusClimateCard extends HTMLElement {
   constructor() {
     super();
@@ -641,7 +726,11 @@ class NimbusClimateCard extends HTMLElement {
       minimal_response: true,
       no_attributes: true,
     }).then(result => {
-      const series = (result?.[sensorId] || []).map(s => Number(s.s)).filter(v => Number.isFinite(v));
+      const series = _resampleTempHistory(
+        result?.[sensorId] || [],
+        start.getTime(),
+        now.getTime(),
+      );
       if (series.length >= 2) { this._history[entityId] = series; this._render(); }
     }).catch(() => {});
   }
@@ -649,22 +738,44 @@ class NimbusClimateCard extends HTMLElement {
   _sparklineSVG(pts) {
     if (!pts || pts.length < 2) return '';
     const w = 120, h = 52, pad = 3;
-    const min = Math.min(...pts) - 0.1;
-    const max = Math.max(...pts) + 0.1;
-    const range = max - min || 1;
-    const x = (i) => pad + (i / (pts.length - 1)) * (w - pad * 2);
-    const y = (v) => pad + (1 - (v - min) / range) * (h - pad * 2);
-    const smooth = (pts) => {
-      let d = `M ${x(0).toFixed(1)} ${y(pts[0]).toFixed(1)}`;
-      for (let i = 1; i < pts.length; i++) {
-        const x0 = x(i-1), y0 = y(pts[i-1]), x1 = x(i), y1 = y(pts[i]);
+    const points = pts.map((point, index) => typeof point === 'number'
+      ? { t:index, v:point }
+      : { t:Number(point?.t), v:Number(point?.v) })
+      .filter((point) => Number.isFinite(point.t) && Number.isFinite(point.v));
+    if (points.length < 2) return '';
+
+    const rawMin = Math.min(...points.map((point) => point.v));
+    const rawMax = Math.max(...points.map((point) => point.v));
+    const minimumRange = this._getTempUnit().includes('F') ? 4 : 2;
+    const dataRange = rawMax - rawMin;
+    let min, max;
+    if (dataRange < minimumRange) {
+      const centre = (rawMin + rawMax) / 2;
+      min = centre - minimumRange / 2;
+      max = centre + minimumRange / 2;
+    } else {
+      const margin = dataRange * 0.08;
+      min = rawMin - margin;
+      max = rawMax + margin;
+    }
+
+    const range = max - min || minimumRange;
+    const firstTime = points[0].t;
+    const timeRange = points[points.length - 1].t - firstTime || 1;
+    const x = (point) => pad + ((point.t - firstTime) / timeRange) * (w - pad * 2);
+    const y = (value) => pad + (1 - (value - min) / range) * (h - pad * 2);
+    const smooth = (series) => {
+      let d = `M ${x(series[0]).toFixed(1)} ${y(series[0].v).toFixed(1)}`;
+      for (let i = 1; i < series.length; i++) {
+        const x0 = x(series[i-1]), y0 = y(series[i-1].v);
+        const x1 = x(series[i]), y1 = y(series[i].v);
         const cpx = (x0 + x1) / 2;
         d += ` C ${cpx.toFixed(1)} ${y0.toFixed(1)}, ${cpx.toFixed(1)} ${y1.toFixed(1)}, ${x1.toFixed(1)} ${y1.toFixed(1)}`;
       }
       return d;
     };
-    const linePath = smooth(pts);
-    const areaPath = `${linePath} L ${x(pts.length-1).toFixed(1)} ${h} L ${x(0).toFixed(1)} ${h} Z`;
+    const linePath = smooth(points);
+    const areaPath = `${linePath} L ${x(points[points.length-1]).toFixed(1)} ${h} L ${x(points[0]).toFixed(1)} ${h} Z`;
     return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" style="margin-top:10px;opacity:.9;" preserveAspectRatio="none">
       <defs><linearGradient id="sg" x1="0" x2="0" y1="0" y2="1">
         <stop offset="0%" stop-color="var(--accent)" stop-opacity=".3"/>
