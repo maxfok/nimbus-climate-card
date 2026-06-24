@@ -1,7 +1,7 @@
-// Nimbus Climate Card v1.3.2
+// Nimbus Climate Card v1.3.2.1
 // A Home Assistant Lovelace card for climate entities
 
-const CARD_VERSION = '1.3.2';
+const CARD_VERSION = '1.3.2.1';
 const NIMBUS_GRID_ROW_HEIGHT = 56;
 const NIMBUS_GRID_ROW_GAP = 8;
 const NIMBUS_GRID_ROW_PADDING = 4;
@@ -764,6 +764,24 @@ class NimbusClimateCard extends HTMLElement {
     const timeRange = points[points.length - 1].t - firstTime || 1;
     const x = (point) => pad + ((point.t - firstTime) / timeRange) * (w - pad * 2);
     const y = (value) => pad + (1 - (value - min) / range) * (h - pad * 2);
+
+    // At this size 48 half-hour samples leave only ~2.5px between points.
+    // A small five-point weighted average softens recorder steps visually,
+    // while remaining local and bounded by the real readings.
+    const weights = [1, 2, 3, 2, 1];
+    const displayPoints = points.map((point, index) => {
+      let weightedValue = 0;
+      let totalWeight = 0;
+      for (let offset = -2; offset <= 2; offset++) {
+        const neighbour = points[index + offset];
+        if (!neighbour) continue;
+        const weight = weights[offset + 2];
+        weightedValue += neighbour.v * weight;
+        totalWeight += weight;
+      }
+      return { t:point.t, v:weightedValue / totalWeight };
+    });
+
     const smooth = (series) => {
       let d = `M ${x(series[0]).toFixed(1)} ${y(series[0].v).toFixed(1)}`;
       for (let i = 1; i < series.length; i++) {
@@ -774,8 +792,8 @@ class NimbusClimateCard extends HTMLElement {
       }
       return d;
     };
-    const linePath = smooth(points);
-    const areaPath = `${linePath} L ${x(points[points.length-1]).toFixed(1)} ${h} L ${x(points[0]).toFixed(1)} ${h} Z`;
+    const linePath = smooth(displayPoints);
+    const areaPath = `${linePath} L ${x(displayPoints[displayPoints.length-1]).toFixed(1)} ${h} L ${x(displayPoints[0]).toFixed(1)} ${h} Z`;
     return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" style="margin-top:10px;opacity:.9;" preserveAspectRatio="none">
       <defs><linearGradient id="sg" x1="0" x2="0" y1="0" y2="1">
         <stop offset="0%" stop-color="var(--accent)" stop-opacity=".3"/>
