@@ -1,7 +1,7 @@
-// Nimbus Climate Card v1.3.2.1
+// Nimbus Climate Card v1.3.2.2
 // A Home Assistant Lovelace card for climate entities
 
-const CARD_VERSION = '1.3.2.1';
+const CARD_VERSION = '1.3.2.2';
 const NIMBUS_GRID_ROW_HEIGHT = 56;
 const NIMBUS_GRID_ROW_GAP = 8;
 const NIMBUS_GRID_ROW_PADDING = 4;
