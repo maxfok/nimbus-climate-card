@@ -40,6 +40,8 @@ entities:
   - entity: climate.living_room_thermostat
     name: Living Room
     outdoor_sensor: sensor.outdoor_temperature
+    temperature_display_step: 0.5
+    temperature_display_offset: 0.05
     sensors:
       - entity: sensor.bedroom_co2
       - entity: sensor.bedroom_power
@@ -54,6 +56,8 @@ entities:
 | `entities[].name` | string | Display name |
 | `entities[].outdoor_sensor` | string | Outdoor temperature sensor entity ID |
 | `entities[].temperature_sensor` | string | Override sensor used for the history graph |
+| `entities[].temperature_display_step` | number | Optional step used to round displayed climate temperatures (for example `0.5`) |
+| `entities[].temperature_display_offset` | number | Optional offset applied before display rounding; useful when the source value was already rounded |
 | `entities[].sensors` | list | Extra sensor rows (CO2, power, PM2.5, etc.) |
 
 ## Notes
