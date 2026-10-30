@@ -64,6 +64,32 @@ describe('damper integration', () => {
     expect(card.shadowRoot.querySelector('.hac-damper-value').textContent).toBe('medium');
     expect(card.shadowRoot.querySelectorAll('.hac-damper-tick')).toHaveLength(3);
   });
+  it('aligns each select marker with its evenly spaced option tick', () => {
+    for (const [index, value] of ['low', 'medium', 'high'].entries()) {
+      const card = setup('select.room', value, { options: ['low', 'medium', 'high'] });
+      const ticks = [...card.shadowRoot.querySelectorAll('.hac-damper-tick')];
+      const marker = card.shadowRoot.querySelector('.hac-damper-marker');
+      expect(ticks).toHaveLength(3);
+      expect(ticks[index].style.getPropertyValue('--tick')).toBe(marker.style.getPropertyValue('--position'));
+      card.remove();
+    }
+  });
+  it.each([['off', '2px', '25%'], ['on', '50%', '75%']])('highlights only the %s switch half', (state, left, marker) => {
+    const card = setup('switch.room', state);
+    const fill = card.shadowRoot.querySelector('.hac-damper-fill');
+    expect(fill.style.getPropertyValue('--switch-start')).toBe(left);
+    expect(card.shadowRoot.querySelector('.hac-damper-marker').style.getPropertyValue('--position')).toBe(marker);
+    expect(card.shadowRoot.querySelector('.hac-damper-value').textContent).toBe('');
+    expect(card.shadowRoot.querySelector('.hac-damper-labels').textContent).toBe('OFFON');
+    expect(card.shadowRoot.querySelectorAll('.hac-damper-tick')).toHaveLength(0);
+  });
+  it('moves the switch half and marker while previewing without dispatching a service', () => {
+    const card = setup('switch.room', 'off'); const input = card.shadowRoot.querySelector('.hac-damper-range');
+    input.value = '1000'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(card.shadowRoot.querySelector('.hac-damper-fill').style.getPropertyValue('--switch-start')).toBe('50%');
+    expect(card.shadowRoot.querySelector('.hac-damper-marker').style.getPropertyValue('--position')).toBe('75%');
+    expect(card._hass.callService).not.toHaveBeenCalled();
+  });
   it('surfaces a failed service and returns to the reported value', async () => {
     const card = setup('number.room', '15', { min: 10, max: 30, step: 1 });
     card._hass.callService.mockRejectedValue(new Error('denied'));

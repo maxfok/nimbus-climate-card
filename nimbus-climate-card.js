@@ -336,11 +336,12 @@ const CSS = `
   .hac-damper-control { flex:1; min-width:0; position:relative; padding:6px 0; }
   .hac-damper-track { position:relative; height:22px; border-radius:14px; border:1px solid var(--line-2); background:linear-gradient(180deg,rgba(0,0,0,.65) 0%,rgba(255,255,255,.08) 45%,rgba(0,0,0,.5) 100%); box-shadow:inset 0 1px 3px rgba(255,255,255,.13),inset 0 -2px 4px rgba(0,0,0,.65),0 1px 0 rgba(255,255,255,.04); overflow:visible; }
   .hac-damper-fill { position:absolute; inset:2px auto 2px 2px; width:calc(var(--position) - 4px); max-width:calc(100% - 4px); border-radius:inherit; background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 70%,white 30%) 0%,var(--accent) 40%,color-mix(in srgb,var(--accent) 60%,transparent) 100%); box-shadow:0 0 10px var(--glow),inset 0 1px rgba(255,255,255,.25); transition:width .18s ease; }
+  .hac-damper[data-damper-domain="switch"] .hac-damper-fill { left:var(--switch-start); width:calc(50% - 4px); transition:left .18s ease; }
   .hac-damper-marker { position:absolute; top:-4px; bottom:-4px; left:var(--position); width:3px; border-radius:2px; transform:translateX(-50%); background:var(--ink); box-shadow:0 0 4px var(--accent),0 0 12px var(--accent); transition:left .18s ease; z-index:1; }
   .hac-damper-range { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; touch-action:pan-y; }
   .hac-damper-range:focus-visible + .hac-damper-outline { position:absolute; inset:2px -3px; border:2px solid var(--accent); border-radius:13px; pointer-events:none; }
-  .hac-damper-ticks { position:absolute; inset:3px 0 auto; height:28px; pointer-events:none; }
-  .hac-damper-tick { position:absolute; left:var(--tick); top:0; bottom:0; width:1px; background:var(--ink-2); }
+  .hac-damper-ticks { position:absolute; inset:4px 0 auto; height:24px; pointer-events:none; }
+  .hac-damper-tick { position:absolute; left:var(--tick); top:0; bottom:0; width:1px; background:var(--ink-2); opacity:.55; }
   .hac-damper-labels { display:flex; justify-content:space-between; gap:2px; padding-top:5px; font-size:10px; line-height:1.2; color:var(--ink-3); overflow:hidden; }
   .hac-damper-labels span { flex:1; min-width:0; overflow:hidden; text-align:center; text-overflow:ellipsis; white-space:nowrap; }
   .hac-damper-value { flex:none; max-width:32%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
@@ -634,17 +635,19 @@ class NimbusClimateCard extends HTMLElement {
       model.value !== null ? `${model.value}%` : model.state;
     const pos = binaryCover && model.position === null ? (model.state === 'open' ? 1 : model.state === 'closed' ? 0 : null) : model.position ?? null;
     const shownPos = binary && pos !== null ? (pos >= .5 ? .75 : .25) : pos;
-    const ticks = options.map((option, i) => {
+    const ticks = (model.domain === 'switch' ? [] : options).map((option, i) => {
       const fraction = binary ? (i + .5) / 2 : options.length > 1 ? i / (options.length - 1) : 0;
       return `<span class="hac-damper-tick" style="--tick:${fraction * 100}%"></span>`;
     }).join('');
     const labels = options.map(option => `<span>${escapeHtml(option)}</span>`).join('');
     const rangeStep = binary ? 1000 : model.domain === 'select' && options.length > 1 ? 1000 / (options.length - 1) : model.domain === 'number' ? Math.min(1000, 1000 * model.step / (model.max - model.min)) : 10;
     const icon = SVG('M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 2v20M3 7l18 10M21 7 3 17');
+    const switchStart = model.domain === 'switch' && model.available ? (model.value === 'on' ? '50%' : '2px') : '2px';
+    const visibleValue = model.domain === 'switch' && model.available ? '' : display;
     return `<div class="hac-damper" data-damper-domain="${model.domain}">
       <span class="hac-damper-icon">${icon}</span><span class="hac-damper-name">Damper<span class="hac-damper-kind">(${model.domain})</span></span>
-      <div class="hac-damper-control"><div class="hac-damper-track"><div class="hac-damper-fill" style="--position:${(shownPos ?? 0) * 100}%"></div>${shownPos === null ? '' : `<span class="hac-damper-marker" style="--position:${shownPos * 100}%"></span>`}</div>
-      <div class="hac-damper-ticks">${ticks}</div><input class="hac-damper-range" type="range" min="0" max="1000" step="${rangeStep || 1}" value="${(pos ?? 0) * 1000}" aria-label="Damper" aria-valuetext="${escapeHtml(display)}" ${canControl && !this._damperBusy ? '' : 'disabled'}><span class="hac-damper-outline"></span>${labels ? `<div class="hac-damper-labels">${labels}</div>` : ''}</div><span class="hac-damper-value">${escapeHtml(display)}</span>
+      <div class="hac-damper-control"><div class="hac-damper-track"><div class="hac-damper-fill" style="--position:${(shownPos ?? 0) * 100}%;--switch-start:${switchStart};${model.domain === 'switch' && !model.available ? 'visibility:hidden;' : ''}"></div>${shownPos === null ? '' : `<span class="hac-damper-marker" style="--position:${shownPos * 100}%"></span>`}</div>
+      <div class="hac-damper-ticks">${ticks}</div><input class="hac-damper-range" type="range" min="0" max="1000" step="${rangeStep || 1}" value="${(pos ?? 0) * 1000}" aria-label="Damper" aria-valuetext="${escapeHtml(display)}" ${canControl && !this._damperBusy ? '' : 'disabled'}><span class="hac-damper-outline"></span>${labels ? `<div class="hac-damper-labels">${labels}</div>` : ''}</div><span class="hac-damper-value">${escapeHtml(visibleValue)}</span>
     </div>${this._damperError ? `<div class="hac-damper-error" role="alert">${escapeHtml(this._damperError)}</div>` : ''}`;
   }
 
@@ -1197,6 +1200,7 @@ class NimbusClimateCard extends HTMLElement {
         const shown = model?.domain === 'switch' || (model?.domain === 'cover' && !model.canSetPosition) ? (fraction >= .5 ? .75 : .25) : model?.domain === 'select' && model.options?.length > 1 ? Math.round(fraction * (model.options.length - 1)) / (model.options.length - 1) : fraction;
         const container = damperInput.closest('.hac-damper');
         container.querySelector('.hac-damper-fill')?.style.setProperty('--position', `${shown * 100}%`);
+        if (model?.domain === 'switch') container.querySelector('.hac-damper-fill')?.style.setProperty('--switch-start', fraction >= .5 ? '50%' : '2px');
         container.querySelector('.hac-damper-marker')?.style.setProperty('--position', `${shown * 100}%`);
       });
       damperInput.addEventListener('change', () => { this._commitDamper(entityId, Number(damperInput.value) / 1000); });
