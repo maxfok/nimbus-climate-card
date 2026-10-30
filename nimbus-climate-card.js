@@ -1171,16 +1171,71 @@ class NimbusClimateCardEditor extends HTMLElement {
     this._config = {};
     this._hass = null;
     this._dirty = false;
+    this._refreshPending = false;
+    this.shadowRoot.addEventListener('focusout', () => {
+      queueMicrotask(() => {
+        if (this._refreshPending && !this._dirty && !this._editingControl()) {
+          this._refreshPending = false;
+          this._render();
+        }
+      });
+    });
   }
 
   setConfig(config) {
-    this._config = JSON.parse(JSON.stringify(config));
-    if (!this._dirty) this._render();
+    const incoming = JSON.parse(JSON.stringify(config));
+    const active = this.shadowRoot.activeElement;
+    if (!this._dirty && active?.tagName === 'SELECT' && active.dataset.idx !== undefined) {
+      const previous = this._config.entities?.[Number.parseInt(active.dataset.idx, 10)];
+      const match = incoming.entities?.findIndex(entry => entry.entity === previous?.entity) ?? -1;
+      if (match >= 0) active.dataset.idx = String(match);
+      else if (previous && Array.isArray(incoming.entities)) {
+        const target = Math.min(Number.parseInt(active.dataset.idx, 10), incoming.entities.length);
+        incoming.entities.splice(target, 0, previous);
+        active.dataset.idx = String(target);
+      }
+    }
+    if (this._dirty) {
+      const input = this.shadowRoot.activeElement;
+      const idx = Number.parseInt(input?.dataset?.idx, 10);
+      const field = input?.dataset?.field;
+      const edited = this._config.entities?.[idx];
+      if (edited && field && Array.isArray(incoming.entities)) {
+        const match = incoming.entities.findIndex(entry => entry.entity === edited.entity);
+        if (match < 0) {
+          const target = Math.min(idx, incoming.entities.length);
+          incoming.entities.splice(target, 0, edited);
+          input.dataset.idx = String(target);
+        } else {
+          incoming.entities[match][field] = edited[field];
+          input.dataset.idx = String(match);
+        }
+      } else {
+        // Keep the local edit when an incoming configuration cannot be reconciled.
+        this._refreshPending = true;
+        return;
+      }
+    }
+    this._config = incoming;
+    this._refreshEditor();
   }
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._dirty) this._render();
+    this._refreshEditor();
+  }
+
+  _editingControl() {
+    return ['INPUT', 'SELECT', 'TEXTAREA'].includes(this.shadowRoot.activeElement?.tagName);
+  }
+
+  _refreshEditor() {
+    if (this._dirty || this._editingControl()) {
+      this._refreshPending = true;
+      return;
+    }
+    this._refreshPending = false;
+    this._render();
   }
 
   _dispatch() {
