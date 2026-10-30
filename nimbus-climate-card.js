@@ -344,10 +344,8 @@ const CSS = `
   .hac-extra svg { width: 14px; height: 14px; flex-shrink: 0; }
   .hac-extra-label { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-4); display: block; }
   .hac-extra-val { font: 600 12px/1 inherit; color: var(--ink-2); display: block; margin-top: 2px; }
-  .hac-extra-sel {
-    position: absolute; inset: 0; opacity: 0; cursor: pointer;
-    appearance: none; border: 0; background: transparent;
-  }
+  .hac-extra:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hac-extra[aria-expanded="true"] { border-color: var(--accent); color: var(--ink); }
 
   .hac-hum {
     flex: 1; min-width: 80px;
@@ -380,6 +378,8 @@ const CSS = `
 
   .hac-unavailable { text-align: center; padding: 32px 16px; color: var(--ink-3); font: 500 13px/1.5 inherit; }
 `;
+
+const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
 
 const _safeNum = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
 
@@ -510,6 +510,7 @@ class NimbusClimateCard extends HTMLElement {
     // A +/- button held when the card is removed (tab/dashboard switch)
     // would otherwise keep firing set_temperature forever on a detached card.
     this._stopHold();
+    this._closeDropdown();
   }
 
   setConfig(config) {
@@ -540,7 +541,8 @@ class NimbusClimateCard extends HTMLElement {
         const a = s.attributes;
         return [i === this._activeIdx ? 'A' : 'I', s.state,
           a.current_temperature, a.temperature, a.hvac_action,
-          a.fan_mode, a.swing_mode, a.preset_mode, a.current_humidity,
+          a.fan_mode, a.swing_mode, a.swing_horizontal_mode, a.preset_mode, a.current_humidity,
+          JSON.stringify([a.fan_modes, a.swing_modes, a.swing_horizontal_modes, a.preset_modes]),
           e.outdoor_sensor ? hass.states[e.outdoor_sensor]?.state : ''
         ].join(':');
       }).join('|');
@@ -690,6 +692,96 @@ class NimbusClimateCard extends HTMLElement {
     this._hass.callService('climate', 'set_preset_mode', { entity_id: data.entity, preset_mode: mode });
   }
 
+  _closeDropdown(restoreFocus = false) {
+    const open = this._dropdown;
+    if (!open) return;
+    this._dropdown = null;
+    document.removeEventListener('pointerdown', open.outside, true);
+    document.removeEventListener('scroll', open.reposition, true);
+    window.removeEventListener('resize', open.reposition);
+    open.menu.remove();
+    open.button.setAttribute('aria-expanded', 'false');
+    if (restoreFocus && open.button.isConnected) open.button.focus();
+  }
+
+  _toggleDropdown(button, choices, selected, service, entity, keyboard = false) {
+    if (this._dropdown?.button === button) {
+      if (keyboard) this._dropdown.focusOption();
+      else this._closeDropdown(true);
+      return;
+    }
+    this._closeDropdown();
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'listbox');
+    menu.setAttribute('aria-label', button.getAttribute('aria-label'));
+    // A body-level fixed popup is not clipped by dashboard/card containers.
+    Object.assign(menu.style, {
+      position: 'fixed', zIndex: '10000', overflowY: 'auto', overflowX: 'hidden',
+      boxSizing: 'border-box', borderRadius: '11px', padding: '4px',
+      boxShadow: '0 8px 24px rgba(0,0,0,.35)', overscrollBehavior: 'contain',
+      font: getComputedStyle(button).font,
+    });
+    const theme = getComputedStyle(button);
+    menu.style.background = theme.getPropertyValue('--surface-3').trim() || '#2a2c32';
+    menu.style.color = theme.getPropertyValue('--ink').trim() || '#ecebe7';
+    menu.style.border = `1px solid ${theme.getPropertyValue('--line-2').trim() || 'rgba(255,255,255,.1)'}`;
+    const accent = theme.getPropertyValue('--accent').trim() || '#f6aa71';
+    const options = choices.map((value, index) => {
+      const option = document.createElement('button');
+      option.type = 'button'; option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', String(value === selected));
+      option.tabIndex = -1; option.textContent = value;
+      Object.assign(option.style, { display: 'block', width: '100%', border: '0', borderRadius: '7px', padding: '8px', textAlign: 'left', whiteSpace: 'normal', overflowWrap: 'anywhere', cursor: 'pointer', font: 'inherit', color: value === selected ? accent : 'inherit', background: value === selected ? 'rgba(127,127,127,.16)' : 'transparent' });
+      option.addEventListener('click', () => {
+        this._closeDropdown(true);
+        if (service === 'fan') this._setFanMode(value);
+        else if (service === 'swing') this._setSwingMode(value);
+        else if (service === 'swingh') this._hass.callService('climate', 'set_swing_horizontal_mode', { entity_id: entity, swing_horizontal_mode: value });
+        else if (service === 'preset') this._setPresetMode(value);
+      });
+      menu.append(option);
+      return option;
+    });
+    let active = Math.max(0, choices.indexOf(selected));
+    const focusOption = () => { options[active]?.focus(); options[active]?.scrollIntoView?.({ block: 'nearest' }); };
+    menu.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.preventDefault(); this._closeDropdown(true); return; }
+      if (event.key === 'Tab') { this._closeDropdown(true); return; }
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault(); options[active]?.click(); return;
+      }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+        event.preventDefault();
+        active = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : (active + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+        focusOption();
+      }
+    });
+    const reposition = event => {
+      if (event?.type === 'scroll' && menu.contains(event.target)) return;
+      const rect = button.getBoundingClientRect();
+      const gap = 4, margin = 4;
+      const width = Math.max(0, Math.min(rect.width, window.innerWidth - margin * 2));
+      const below = Math.max(0, window.innerHeight - rect.bottom - gap - margin);
+      const above = Math.max(0, rect.top - gap - margin);
+      const desired = Math.min(240, choices.length * 36 + 8);
+      const upward = below < desired && above > below;
+      const available = upward ? above : below;
+      menu.style.width = `${width}px`;
+      menu.style.left = `${Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin))}px`;
+      menu.style.maxHeight = `${Math.min(desired, available)}px`;
+      menu.style.top = upward ? `${Math.max(margin, rect.top - gap - Math.min(desired, available))}px` : `${rect.bottom + gap}px`;
+    };
+    const outside = event => { if (!event.composedPath().includes(button) && !event.composedPath().includes(menu)) this._closeDropdown(); };
+    this._dropdown = { button, menu, outside, reposition, focusOption };
+    button.setAttribute('aria-expanded', 'true');
+    document.body.append(menu);
+    reposition();
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    focusOption();
+  }
+
   _setHumidity(delta) {
     const data = this._getEntityData(this._activeIdx);
     if (!data || data.targetHumidity == null) return;
@@ -812,6 +904,9 @@ class NimbusClimateCard extends HTMLElement {
 
   _render() {
     if (!this._config.entities) return;
+    const focusedControl = this._dropdown?.menu.contains(document.activeElement)
+      ? this._dropdown.button.dataset.service : null;
+    this._closeDropdown();
     this._ensureActiveIndex();
 
     const t = getT(this._hass);
@@ -863,42 +958,13 @@ class NimbusClimateCard extends HTMLElement {
         <button class="hac-hum-btn" id="hum-up">+</button>
       </div>`);
     }
-    if (data?.fanModes?.length) {
-      extras.push(`<div class="hac-extra">
-        ${ICONS.fan}
-        <div><span class="hac-extra-label">${t.ui.speed}</span><span class="hac-extra-val">${data.fanMode || '--'}</span></div>
-        <select class="hac-extra-sel" data-service="fan">
-          ${data.fanModes.map(f => `<option value="${f}" ${f===data.fanMode?'selected':''}>${f}</option>`).join('')}
-        </select>
-      </div>`);
-    }
-    if (data?.swingModes?.length) {
-      extras.push(`<div class="hac-extra">
-        ${ICONS.swing}
-        <div><span class="hac-extra-label">${t.ui.swingV}</span><span class="hac-extra-val">${data.swingMode || '--'}</span></div>
-        <select class="hac-extra-sel" data-service="swing">
-          ${data.swingModes.map(s => `<option value="${s}" ${s===data.swingMode?'selected':''}>${s}</option>`).join('')}
-        </select>
-      </div>`);
-    }
-    if (data?.swingHModes?.length) {
-      extras.push(`<div class="hac-extra">
-        ${ICONS.swing}
-        <div><span class="hac-extra-label">${t.ui.swingH}</span><span class="hac-extra-val">${data.swingHMode || '--'}</span></div>
-        <select class="hac-extra-sel" data-service="swingh">
-          ${data.swingHModes.map(s => `<option value="${s}" ${s===data.swingHMode?'selected':''}>${s}</option>`).join('')}
-        </select>
-      </div>`);
-    }
-    if (data?.presetModes?.length) {
-      extras.push(`<div class="hac-extra">
-        ${ICONS.preset}
-        <div><span class="hac-extra-label">${t.ui.preset}</span><span class="hac-extra-val">${data.presetMode || '--'}</span></div>
-        <select class="hac-extra-sel" data-service="preset">
-          ${data.presetModes.map(p => `<option value="${p}" ${p===data.presetMode?'selected':''}>${p}</option>`).join('')}
-        </select>
-      </div>`);
-    }
+    const extraControl = (service, label, icon, value) => `<button type="button" class="hac-extra" data-service="${service}" aria-haspopup="listbox" aria-expanded="false" aria-label="${label}">
+      ${icon}<span><span class="hac-extra-label">${label}</span><span class="hac-extra-val">${escapeHtml(value || '--')}</span></span>
+    </button>`;
+    if (data?.fanModes?.length) extras.push(extraControl('fan', t.ui.speed, ICONS.fan, data.fanMode));
+    if (data?.swingModes?.length) extras.push(extraControl('swing', t.ui.swingV, ICONS.swing, data.swingMode));
+    if (data?.swingHModes?.length) extras.push(extraControl('swingh', t.ui.swingH, ICONS.swing, data.swingHMode));
+    if (data?.presetModes?.length) extras.push(extraControl('preset', t.ui.preset, ICONS.preset, data.presetMode));
 
     const body = data ? `
       <div class="hac-body">
@@ -999,6 +1065,8 @@ class NimbusClimateCard extends HTMLElement {
         </div>
       </div>`;
 
+    if (focusedControl) this.shadowRoot.querySelector(`button.hac-extra[data-service="${focusedControl}"]`)?.focus();
+
     // Events
     this.shadowRoot.querySelectorAll('.hac-tab').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1010,13 +1078,16 @@ class NimbusClimateCard extends HTMLElement {
       btn.addEventListener('click', () => this._setMode(btn.dataset.mode));
     });
 
-    this.shadowRoot.querySelectorAll('.hac-extra-sel').forEach(sel => {
-      sel.addEventListener('change', () => {
-        const svc = sel.dataset.service;
-        if (svc === 'fan')    this._setFanMode(sel.value);
-        if (svc === 'swing')  this._setSwingMode(sel.value);
-        if (svc === 'swingh') this._hass.callService('climate', 'set_swing_horizontal_mode', { entity_id: data.entity, swing_horizontal_mode: sel.value });
-        if (svc === 'preset') this._setPresetMode(sel.value);
+    this.shadowRoot.querySelectorAll('button.hac-extra').forEach(button => {
+      const service = button.dataset.service;
+      const choices = { fan: data.fanModes, swing: data.swingModes, swingh: data.swingHModes, preset: data.presetModes }[service];
+      const selected = { fan: data.fanMode, swing: data.swingMode, swingh: data.swingHMode, preset: data.presetMode }[service];
+      button.addEventListener('click', () => this._toggleDropdown(button, choices, selected, service, data.entity));
+      button.addEventListener('keydown', event => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          this._toggleDropdown(button, choices, selected, service, data.entity, true);
+        }
       });
     });
 

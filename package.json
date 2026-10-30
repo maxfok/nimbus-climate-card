@@ -1,0 +1,25 @@
+{
+  "name": "nimbus-climate-card",
+  "version": "1.0.0",
+  "description": "A Home Assistant Lovelace card for climate entities, built as part of the [Nimbus suite](https://github.com/maxfok/nimbus-weather-card).",
+  "scripts": {
+    "test": "vitest run --environment jsdom"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maxfok/nimbus-climate-card.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/maxfok/nimbus-climate-card/issues"
+  },
+  "homepage": "https://github.com/maxfok/nimbus-climate-card#readme",
+  "devDependencies": {
+    "jsdom": "^29.1.1",
+    "vitest": "^5.0.5"
+  },
+  "private": true
+}
