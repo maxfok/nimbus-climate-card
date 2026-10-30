@@ -139,6 +139,17 @@ describe('damper integration', () => {
     expect(card._hass.callService).toHaveBeenCalledTimes(1);
     expect(card._hass.callService).toHaveBeenCalledWith('number', 'set_value', { entity_id: 'number.room', value: 24 });
   });
+  it('commits a select pointer gesture once if the browser omits change', async () => {
+    const card = setup('select.room', 'low', { options: ['low', 'mid', 'high'] });
+    const input = card.shadowRoot.querySelector('.hac-damper-range');
+    input.dispatchEvent(new Event('pointerdown')); input.value = '1000';
+    input.dispatchEvent(new Event('input')); input.dispatchEvent(new Event('pointerup'));
+    await Promise.resolve();
+    expect(card._hass.callService).toHaveBeenCalledTimes(1);
+    expect(card._hass.callService).toHaveBeenCalledWith('select', 'select_option', { entity_id: 'select.room', option: 'high' });
+    input.dispatchEvent(new Event('change'));
+    expect(card._hass.callService).toHaveBeenCalledTimes(1);
+  });
   it('never dispatches an off-step number above its allowed step range', async () => {
     const card = setup('number.room', '0', { min: 0, max: 10, step: 6 });
     await card._commitDamper('number.room', 1);

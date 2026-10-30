@@ -1203,15 +1203,23 @@ class NimbusClimateCard extends HTMLElement {
     const damperInput = this.shadowRoot.querySelector('.hac-damper-range');
     if (damperInput) {
       const entityId = this._config.entities[this._activeIdx]?.damper_entity;
-      damperInput.addEventListener('pointerdown', event => { this._damperInteracting = true; damperInput.setPointerCapture?.(event.pointerId); });
+      let pointerSequence = false, pointerChanged = false, changeHandled = false, fallbackValue = null;
+      damperInput.addEventListener('pointerdown', event => { pointerSequence = true; pointerChanged = false; changeHandled = false; fallbackValue = null; this._damperInteracting = true; damperInput.setPointerCapture?.(event.pointerId); });
       const finish = () => {
         this._damperInteracting = false;
         if (this._damperRefreshPending) { this._damperRefreshPending = false; this._render(); }
       };
-      damperInput.addEventListener('pointercancel', finish);
-      damperInput.addEventListener('lostpointercapture', finish);
-      damperInput.addEventListener('pointerup', () => { queueMicrotask(finish); });
+      damperInput.addEventListener('pointercancel', () => { pointerSequence = false; finish(); });
+      damperInput.addEventListener('lostpointercapture', () => { if (!pointerSequence) finish(); });
+      damperInput.addEventListener('pointerup', () => { queueMicrotask(() => {
+        if (entityId?.startsWith('select.') && pointerChanged && !changeHandled) {
+          fallbackValue = damperInput.value;
+          this._commitDamper(entityId, Number(damperInput.value) / 1000);
+        }
+        pointerSequence = false; finish();
+      }); });
       damperInput.addEventListener('input', () => {
+        if (pointerSequence) pointerChanged = true;
         const model = this._getDamperModel(entityId);
         const fraction = Number(damperInput.value) / 1000;
         const shown = model?.domain === 'switch' || (model?.domain === 'cover' && !model.canSetPosition) ? (fraction >= .5 ? .75 : .25) : model?.domain === 'select' && model.options?.length > 1 ? Math.round(fraction * (model.options.length - 1)) / (model.options.length - 1) : fraction;
@@ -1219,7 +1227,11 @@ class NimbusClimateCard extends HTMLElement {
         container.querySelector('.hac-damper-fill')?.style.setProperty('--position', `${shown * 100}%`);
         if (model?.domain === 'switch') container.querySelector('.hac-damper-fill')?.style.setProperty('--switch-start', fraction >= .5 ? '50%' : '2px');
       });
-      damperInput.addEventListener('change', () => { this._commitDamper(entityId, Number(damperInput.value) / 1000); });
+      damperInput.addEventListener('change', () => {
+        changeHandled = true;
+        if (fallbackValue === damperInput.value) { fallbackValue = null; return; }
+        this._commitDamper(entityId, Number(damperInput.value) / 1000);
+      });
     }
     this.shadowRoot.querySelectorAll('.hac-tab').forEach(btn => {
       btn.addEventListener('click', () => {
