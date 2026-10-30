@@ -383,6 +383,16 @@ const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({'&':'&am
 
 const _safeNum = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
 
+export const roundTemperatureForDisplay = (value, step, offset = 0) => {
+  const numeric = _safeNum(value);
+  const displayStep = _safeNum(step);
+  if (numeric == null || displayStep == null || displayStep <= 0) return numeric;
+  const displayOffset = _safeNum(offset) ?? 0;
+  const scaled = (numeric + displayOffset) / displayStep;
+  const roundedUnits = Math.sign(scaled || 1) * Math.round(Math.abs(scaled));
+  return Number((roundedUnits * displayStep).toFixed(6));
+};
+
 const _historyTimeMs = (row) => {
   const raw = row?.lu ?? row?.last_updated ?? row?.last_changed;
   if (typeof raw === 'number') {
@@ -638,6 +648,8 @@ class NimbusClimateCard extends HTMLElement {
       targetHumidity: a.humidity ?? null,
       minTemp:      a.min_temp ?? 5,
       maxTemp:      a.max_temp ?? 40,
+      displayTempStep:   _safeNum(entry.temperature_display_step),
+      displayTempOffset: _safeNum(entry.temperature_display_offset) ?? 0,
     };
   }
 
@@ -914,8 +926,19 @@ class NimbusClimateCard extends HTMLElement {
     const mode = data?.state || 'off';
     const m = MODES[mode] || MODES.off;
 
-    const hasTarget = data?.targetTemp != null;
-    const delta = (data && hasTarget) ? +((data.targetTemp - (data.currentTemp || 0)).toFixed(1)) : null;
+    const displayTemp = (value) => roundTemperatureForDisplay(
+      value,
+      data?.displayTempStep,
+      data?.displayTempOffset
+    );
+    const displayCurrentTemp = displayTemp(data?.currentTemp);
+    const displayTargetTemp = displayTemp(data?.targetTemp);
+    const displayTempLow = displayTemp(data?.tempLow);
+    const displayTempHigh = displayTemp(data?.tempHigh);
+    const hasTarget = displayTargetTemp != null;
+    const delta = displayCurrentTemp != null && hasTarget
+      ? +((displayTargetTemp - displayCurrentTemp).toFixed(1))
+      : null;
     const reaching = delta !== null && ((mode === 'heat' && delta > 0) || (mode === 'cool' && delta < 0));
 
     const tabs = this._config.entities.map((e, i) => {
@@ -972,7 +995,7 @@ class NimbusClimateCard extends HTMLElement {
           <div class="hac-reading">
             <div class="hac-rval">
               <span class="hac-ricon">${ICONS.thermometer}</span>
-              <span class="hac-num">${data.currentTemp?.toFixed(1) ?? '--'}</span>
+              <span class="hac-num">${displayCurrentTemp?.toFixed(1) ?? '--'}</span>
               <span class="hac-unit">${this._getTempUnit()}</span>
             </div>
             ${data.humidity != null ? `
@@ -1012,14 +1035,14 @@ class NimbusClimateCard extends HTMLElement {
               <div class="hac-tlabel">${t.ui.noTarget}</div>
             ` : data.canSetRange && data.tempLow != null && data.tempHigh != null ? `
               <div style="font:600 13px/1 inherit;color:var(--ink-3);margin-bottom:2px;">
-                <span style="color:oklch(0.78 0.16 45)">${data.tempLow.toFixed(1)}</span>
+                <span style="color:oklch(0.78 0.16 45)">${displayTempLow.toFixed(1)}</span>
                 <span style="color:var(--ink-4);padding:0 4px;">–</span>
-                <span style="color:oklch(0.78 0.13 235)">${data.tempHigh?.toFixed(1)}${this._getTempUnit()}</span>
+                <span style="color:oklch(0.78 0.13 235)">${displayTempHigh?.toFixed(1)}${this._getTempUnit()}</span>
               </div>
               <div class="hac-tlabel">${t.ui.range}</div>
             ` : `
               <div class="hac-tnum">
-                ${data.targetTemp?.toFixed(1) ?? '--'}
+                ${displayTargetTemp?.toFixed(1) ?? '--'}
                 <span class="hac-tunit">${this._getTempUnit()}</span>
               </div>
               <div class="hac-tlabel">${t.ui.target}</div>
@@ -1340,6 +1363,14 @@ class NimbusClimateCardEditor extends HTMLElement {
                 </select>
               </div>
               <div class="field">
+                <span class="field-label">Display temperature step</span>
+                <input type="number" min="0" step="0.1" data-idx="${i}" data-number-field="temperature_display_step" value="${e.temperature_display_step ?? ''}" placeholder="Entity default · e.g. 0.5">
+              </div>
+              <div class="field">
+                <span class="field-label">Display rounding offset</span>
+                <input type="number" step="0.01" data-idx="${i}" data-number-field="temperature_display_offset" value="${e.temperature_display_offset ?? ''}" placeholder="Optional · e.g. 0.05">
+              </div>
+              <div class="field">
                 <span class="field-label">Outdoor temperature sensor</span>
                 <select data-idx="${i}" data-field="outdoor_sensor">
                   <option value="">None</option>
@@ -1417,6 +1448,17 @@ class NimbusClimateCardEditor extends HTMLElement {
       });
       inp.addEventListener('blur', () => {
         this._dirty = false;
+      });
+    });
+
+    this.shadowRoot.querySelectorAll('input[data-number-field]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const idx = parseInt(inp.dataset.idx);
+        const field = inp.dataset.numberField;
+        const value = inp.value === '' ? null : Number.parseFloat(inp.value);
+        if (value == null || !Number.isFinite(value)) delete this._config.entities[idx][field];
+        else this._config.entities[idx][field] = value;
+        this._dispatch();
       });
     });
 
