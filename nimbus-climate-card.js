@@ -341,7 +341,7 @@ const CSS = `
   .hac-damper-range:focus-visible + .hac-damper-outline { position:absolute; inset:2px -3px; border:2px solid var(--accent); border-radius:13px; pointer-events:none; }
   .hac-damper-ticks { position:absolute; inset:4px 0 auto; height:24px; pointer-events:none; }
   .hac-damper-tick { position:absolute; left:var(--tick); top:0; bottom:0; width:1px; background:var(--ink-2); opacity:.55; }
-  .hac-damper-select-area { position:absolute; inset:0 2px; }
+  .hac-damper-select-area { position:absolute; inset:0 2px; border-radius:inherit; }
   .hac-damper-select-area .hac-damper-fill { left:0; width:var(--position); max-width:100%; }
   .hac-damper-select-area .hac-damper-range { -webkit-appearance:none; appearance:none; inset:-6px 0; width:100%; height:calc(100% + 12px); }
   .hac-damper-select-area .hac-damper-range::-webkit-slider-thumb { -webkit-appearance:none; width:0; height:0; }
