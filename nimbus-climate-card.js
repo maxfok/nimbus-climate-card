@@ -405,7 +405,7 @@ function _damperModel(entityId, entity) {
   if (!['cover', 'number', 'select', 'switch'].includes(domain)) return null;
   const state = entity?.state;
   const attrs = entity?.attributes || {};
-  if (!entity || ['unknown', 'unavailable'].includes(state)) return { domain, available: false };
+  if (!entity || state == null || String(state).trim() === '' || ['unknown', 'unavailable'].includes(state)) return { domain, available: false };
   if (domain === 'cover') {
     const features = Number(attrs.supported_features) || 0;
     const raw = attrs.current_position;

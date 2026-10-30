@@ -13,6 +13,7 @@ describe('damper entity state', () => {
     for (const domain of ['cover', 'number', 'select', 'switch']) {
       expect(model(`${domain}.room`, 'unavailable')).toEqual({ domain, available: false });
     }
+    expect(model('cover.room', undefined)).toEqual({ domain: 'cover', available: false });
   });
   it('reads cover position and capability flags without inventing position', () => {
     expect(model('cover.room', 'open', { current_position: 35, supported_features: 7 })).toMatchObject({ position: .35, value: 35, canSetPosition: true, canOpen: true, canClose: true });
