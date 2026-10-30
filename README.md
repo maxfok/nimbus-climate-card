@@ -10,6 +10,7 @@ A Home Assistant Lovelace card for climate entities, built as part of the [Nimbu
 - Multiple climate entities in a single card with tabs
 - Sparkline temperature history graph
 - Fan, swing and preset mode controls
+- Optional damper control for cover, number, select or switch entities
 - Temperature and humidity display with inline icons
 - Extra sensor rows (CO2, power, PM2.5 - icon picked automatically from device class)
 - Ambient glow that adapts to the active HVAC mode
@@ -37,6 +38,7 @@ type: custom:nimbus-climate-card
 entities:
   - entity: climate.bedroom_thermostat
     name: Bedroom
+    damper_entity: cover.bedroom_damper
   - entity: climate.living_room_thermostat
     name: Living Room
     outdoor_sensor: sensor.outdoor_temperature
@@ -52,6 +54,7 @@ entities:
 | `entities` | list | List of climate entities (required) |
 | `entities[].entity` | string | Climate entity ID |
 | `entities[].name` | string | Display name |
+| `entities[].damper_entity` | string | Optional `cover`, `number`, `select`, or `switch` entity to control the damper |
 | `entities[].outdoor_sensor` | string | Outdoor temperature sensor entity ID |
 | `entities[].temperature_sensor` | string | Override sensor used for the history graph |
 | `entities[].sensors` | list | Extra sensor rows (CO2, power, PM2.5, etc.) |
