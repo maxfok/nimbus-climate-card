@@ -41,6 +41,22 @@ describe('configuration editor refresh', () => {
     expect([...editor.shadowRoot.querySelector('select[data-field="entity"]').options].map(option => option.value)).toContain('climate.new');
   });
 
+  it('applies an incoming config while retaining the focused name edit, even after reordering', async () => {
+    const { editor, config } = makeEditor();
+    const input = editor.shadowRoot.querySelector('input[data-field="name"]');
+    input.focus(); input.value = 'Bedroom'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    const incoming = structuredClone(config);
+    incoming.entities[0].outdoor_sensor = 'sensor.temp';
+    incoming.entities.unshift({ entity: 'climate.other', name: 'Other' });
+    editor.setConfig(incoming);
+    expect(editor.shadowRoot.querySelector('input[data-field="name"]')).toBe(input);
+    input.value = 'Bedroom 2'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.blur(); await Promise.resolve();
+    expect(editor._config.entities[1]).toMatchObject({ entity: 'climate.room', name: 'Bedroom 2', outdoor_sensor: 'sensor.temp' });
+    expect(editor.shadowRoot.querySelector('input[data-idx="1"]').value).toBe('Bedroom 2');
+    expect(editor.shadowRoot.querySelector('select[data-idx="1"][data-field="outdoor_sensor"]').value).toBe('sensor.temp');
+  });
+
   it('preserves a changed selection and dispatches the existing configuration', async () => {
     const { editor, hass } = makeEditor();
     let result; editor.addEventListener('config-changed', event => { result = structuredClone(event.detail.config); editor.setConfig(event.detail.config); });
