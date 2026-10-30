@@ -75,6 +75,24 @@ describe('damper integration', () => {
       card.remove();
     }
   });
+  it.each([3, 5, 7])('uses one coordinate area for %i option markers, labels, input and fill', async count => {
+    const options = Array.from({ length: count }, (_, i) => `option-${i}`);
+    for (let index = 0; index < count; index++) {
+      const card = setup('select.room', options[index], { options });
+      const area = card.shadowRoot.querySelector('.hac-damper-select-area');
+      const markers = [...area.querySelectorAll('.hac-damper-vmark')];
+      const labels = [...area.querySelectorAll('.hac-damper-select-labels span')];
+      const position = `${index / (count - 1) * 100}%`;
+      expect(markers[index].style.getPropertyValue('--tick')).toBe(position);
+      expect(labels[index].style.getPropertyValue('--tick')).toBe(position);
+      expect(area.querySelector('.hac-damper-fill').style.getPropertyValue('--position')).toBe(position);
+      expect(Number(area.querySelector('.hac-damper-range').value)).toBeCloseTo(index / (count - 1) * 1000, 6);
+      const next = (index + 1) % count;
+      await card._commitDamper('select.room', next / (count - 1));
+      expect(card._hass.callService).toHaveBeenCalledWith('select', 'select_option', { entity_id: 'select.room', option: options[next] });
+      card.remove();
+    }
+  });
   it.each([['off', '2px'], ['on', '50%']])('highlights only the %s switch half', (state, left) => {
     const card = setup('switch.room', state);
     const fill = card.shadowRoot.querySelector('.hac-damper-fill');

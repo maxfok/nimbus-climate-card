@@ -341,11 +341,18 @@ const CSS = `
   .hac-damper-range:focus-visible + .hac-damper-outline { position:absolute; inset:2px -3px; border:2px solid var(--accent); border-radius:13px; pointer-events:none; }
   .hac-damper-ticks { position:absolute; inset:4px 0 auto; height:24px; pointer-events:none; }
   .hac-damper-tick { position:absolute; left:var(--tick); top:0; bottom:0; width:1px; background:var(--ink-2); opacity:.55; }
-  .hac-damper-vmarks { position:absolute; inset:0 0 auto; height:34px; pointer-events:none; }
-  .hac-damper-vmark { position:absolute; left:clamp(0px, calc(var(--tick) - 2px), 100%); top:0; bottom:0; width:0; }
-  .hac-damper-vmark::before, .hac-damper-vmark::after { content:''; position:absolute; left:-2px; width:3px; height:3px; border-right:1px solid rgba(150,150,150,.45); border-bottom:1px solid rgba(150,150,150,.45); filter:drop-shadow(0 1px 0 rgba(0,0,0,.8)); }
-  .hac-damper-vmark::before { top:0; transform:rotate(45deg); }
-  .hac-damper-vmark::after { bottom:0; transform:rotate(225deg); }
+  .hac-damper-select-area { position:absolute; inset:0 2px; }
+  .hac-damper-select-area .hac-damper-fill { left:0; width:var(--position); max-width:100%; }
+  .hac-damper-select-area .hac-damper-range { -webkit-appearance:none; appearance:none; inset:-6px 0; width:100%; height:calc(100% + 12px); }
+  .hac-damper-select-area .hac-damper-range::-webkit-slider-thumb { -webkit-appearance:none; width:0; height:0; }
+  .hac-damper-select-area .hac-damper-range::-moz-range-thumb { width:0; height:0; border:0; }
+  .hac-damper-vmark { position:absolute; left:var(--tick); top:0; bottom:0; width:0; pointer-events:none; }
+  .hac-damper-vmark::before, .hac-damper-vmark::after { content:''; position:absolute; left:-2px; width:3px; height:3px; border-right:1px solid rgba(165,165,165,.68); border-bottom:1px solid rgba(165,165,165,.68); filter:drop-shadow(0 1px 0 rgba(0,0,0,.85)); }
+  .hac-damper-vmark::before { top:-6px; transform:rotate(45deg); }
+  .hac-damper-vmark::after { bottom:-6px; transform:rotate(225deg); }
+  .hac-damper-select-labels { position:absolute; inset:calc(100% + 5px) 0 auto; height:12px; font-size:10px; line-height:1.2; color:var(--ink-3); pointer-events:none; }
+  .hac-damper-select-labels span { position:absolute; left:var(--tick); transform:translateX(-50%); white-space:nowrap; max-width:var(--label-width); overflow:hidden; text-overflow:ellipsis; text-align:center; }
+  .hac-damper-select-spacer { height:17px; }
   .hac-damper-labels { display:flex; justify-content:space-between; gap:2px; padding-top:5px; font-size:10px; line-height:1.2; color:var(--ink-3); overflow:hidden; }
   .hac-damper-labels span { flex:1; min-width:0; overflow:hidden; text-align:center; text-overflow:ellipsis; white-space:nowrap; }
   .hac-damper-value { flex:none; max-width:32%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
@@ -643,15 +650,21 @@ class NimbusClimateCard extends HTMLElement {
       const fraction = binary ? (i + .5) / 2 : options.length > 1 ? i / (options.length - 1) : 0;
       return `<span class="${model.domain === 'select' ? 'hac-damper-vmark' : 'hac-damper-tick'}" style="--tick:${fraction * 100}%"></span>`;
     }).join('');
-    const labels = options.map(option => `<span>${escapeHtml(option)}</span>`).join('');
+    const labels = options.map((option, i) => model.domain === 'select'
+      ? `<span style="--tick:${options.length > 1 ? i / (options.length - 1) * 100 : 0}%;--label-width:${100 / Math.max(options.length, 1)}%">${escapeHtml(option)}</span>`
+      : `<span>${escapeHtml(option)}</span>`).join('');
     const rangeStep = binary ? 1000 : model.domain === 'select' && options.length > 1 ? 1000 / (options.length - 1) : model.domain === 'number' ? Math.min(1000, 1000 * model.step / (model.max - model.min)) : 10;
     const icon = SVG('M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 2v20M3 7l18 10M21 7 3 17');
     const switchStart = model.domain === 'switch' && model.available ? (model.value === 'on' ? '50%' : '2px') : '2px';
     const visibleValue = model.domain === 'switch' && model.available ? '' : display;
+    const fill = `<div class="hac-damper-fill" style="--position:${(shownPos ?? 0) * 100}%;--switch-start:${switchStart};${model.domain === 'switch' && !model.available ? 'visibility:hidden;' : ''}"></div>`;
+    const input = `<input class="hac-damper-range" type="range" min="0" max="1000" step="${rangeStep || 1}" value="${(pos ?? 0) * 1000}" aria-label="Damper" aria-valuetext="${escapeHtml(display)}" ${canControl && !this._damperBusy ? '' : 'disabled'}><span class="hac-damper-outline"></span>`;
+    const track = model.domain === 'select'
+      ? `<div class="hac-damper-track"><div class="hac-damper-select-area">${fill}${ticks}${input}<div class="hac-damper-select-labels">${labels}</div></div></div><div class="hac-damper-select-spacer"></div>`
+      : `<div class="hac-damper-track">${fill}</div><div class="hac-damper-ticks">${ticks}</div>${input}${labels ? `<div class="hac-damper-labels">${labels}</div>` : ''}`;
     return `<div class="hac-damper" data-damper-domain="${model.domain}">
       <span class="hac-damper-icon">${icon}</span><span class="hac-damper-name">Damper<span class="hac-damper-kind">(${model.domain})</span></span>
-      <div class="hac-damper-control"><div class="hac-damper-track"><div class="hac-damper-fill" style="--position:${(shownPos ?? 0) * 100}%;--switch-start:${switchStart};${model.domain === 'switch' && !model.available ? 'visibility:hidden;' : ''}"></div></div>
-      <div class="${model.domain === 'select' ? 'hac-damper-vmarks' : 'hac-damper-ticks'}">${ticks}</div><input class="hac-damper-range" type="range" min="0" max="1000" step="${rangeStep || 1}" value="${(pos ?? 0) * 1000}" aria-label="Damper" aria-valuetext="${escapeHtml(display)}" ${canControl && !this._damperBusy ? '' : 'disabled'}><span class="hac-damper-outline"></span>${labels ? `<div class="hac-damper-labels">${labels}</div>` : ''}</div><span class="hac-damper-value">${escapeHtml(visibleValue)}</span>
+      <div class="hac-damper-control">${track}</div><span class="hac-damper-value">${escapeHtml(visibleValue)}</span>
     </div>${this._damperError ? `<div class="hac-damper-error" role="alert">${escapeHtml(this._damperError)}</div>` : ''}`;
   }
 
