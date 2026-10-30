@@ -1171,16 +1171,38 @@ class NimbusClimateCardEditor extends HTMLElement {
     this._config = {};
     this._hass = null;
     this._dirty = false;
+    this._refreshPending = false;
+    this.shadowRoot.addEventListener('focusout', () => {
+      queueMicrotask(() => {
+        if (this._refreshPending && !this._dirty && !this._editingControl()) {
+          this._refreshPending = false;
+          this._render();
+        }
+      });
+    });
   }
 
   setConfig(config) {
-    this._config = JSON.parse(JSON.stringify(config));
-    if (!this._dirty) this._render();
+    if (!this._dirty) this._config = JSON.parse(JSON.stringify(config));
+    this._refreshEditor();
   }
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._dirty) this._render();
+    this._refreshEditor();
+  }
+
+  _editingControl() {
+    return ['INPUT', 'SELECT', 'TEXTAREA'].includes(this.shadowRoot.activeElement?.tagName);
+  }
+
+  _refreshEditor() {
+    if (this._dirty || this._editingControl()) {
+      this._refreshPending = true;
+      return;
+    }
+    this._refreshPending = false;
+    this._render();
   }
 
   _dispatch() {
