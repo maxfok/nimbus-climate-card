@@ -328,7 +328,7 @@ const CSS = `
   .hac-extras {
     display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
   }
-  .hac-damper { display:flex; align-items:center; gap:10px; padding:10px 12px; margin:0 0 8px; min-width:0; border:1px solid var(--line); border-radius:11px; background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01)); color:var(--ink-2); }
+  .hac-damper { display:flex; align-items:center; gap:10px; padding:10px 12px; margin:0 0 8px; min-width:0; container-type:inline-size; border:1px solid var(--line); border-radius:11px; background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01)); color:var(--ink-2); }
   .hac-damper-icon { width:26px; height:26px; flex:none; color:var(--ink-2); }
   .hac-damper-icon svg { display:block; width:100%; height:100%; }
   .hac-damper-name { min-width:52px; font-size:12px; line-height:1.2; color:var(--ink); }
@@ -357,6 +357,7 @@ const CSS = `
   .hac-damper-labels span { flex:1; min-width:0; overflow:hidden; text-align:center; text-overflow:ellipsis; white-space:nowrap; }
   .hac-damper-value { flex:none; max-width:32%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
   .hac-damper-error { color:var(--ink-2); font-size:11px; margin:0 0 8px; }
+  @container (max-width: 300px) { .hac-damper[data-damper-domain="select"] .hac-damper-control { margin-left:8px; } }
   .hac-extra {
     flex: 1; min-width: 80px;
     appearance: none; cursor: pointer;
@@ -420,9 +421,10 @@ function _damperModel(entityId, entity) {
   const attrs = entity?.attributes || {};
   if (!entity || state == null || String(state).trim() === '' || ['unknown', 'unavailable'].includes(state)) return { domain, available: false };
   if (domain === 'cover') {
+    if (!['open', 'closed', 'opening', 'closing'].includes(state)) return { domain, available: false };
     const features = Number(attrs.supported_features) || 0;
     const raw = attrs.current_position;
-    const position = raw === null || raw === undefined || raw === '' ? NaN : Number(raw);
+    const position = raw === null || raw === undefined || String(raw).trim() === '' ? NaN : Number(raw);
     const validPosition = Number.isFinite(position) && position >= 0 && position <= 100;
     return { domain, available: true, position: validPosition ? position / 100 : null,
       value: validPosition ? position : null, canSetPosition: !!(features & 4),
@@ -430,7 +432,7 @@ function _damperModel(entityId, entity) {
   }
   if (domain === 'number') {
     const min = Number(attrs.min), max = Number(attrs.max), step = Number(attrs.step), value = Number(state);
-    if ([attrs.min, attrs.max, attrs.step, state].some(x => x === null || x === undefined || x === '') ||
+    if ([attrs.min, attrs.max, attrs.step, state].some(x => x === null || x === undefined || String(x).trim() === '') ||
         ![min, max, step, value].every(Number.isFinite) || max <= min || step <= 0 || value < min || value > max) {
       return { domain, available: false };
     }
@@ -1209,10 +1211,10 @@ class NimbusClimateCard extends HTMLElement {
         this._damperInteracting = false;
         if (this._damperRefreshPending) { this._damperRefreshPending = false; this._render(); }
       };
-      damperInput.addEventListener('pointercancel', () => { pointerSequence = false; finish(); });
+      damperInput.addEventListener('pointercancel', () => { pointerSequence = false; this._damperRefreshPending = true; finish(); });
       damperInput.addEventListener('lostpointercapture', () => { if (!pointerSequence) finish(); });
       damperInput.addEventListener('pointerup', () => { queueMicrotask(() => {
-        if (entityId?.startsWith('select.') && pointerChanged && !changeHandled) {
+        if (pointerChanged && !changeHandled) {
           fallbackValue = damperInput.value;
           this._commitDamper(entityId, Number(damperInput.value) / 1000);
         }
