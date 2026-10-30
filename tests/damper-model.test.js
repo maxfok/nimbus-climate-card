@@ -19,6 +19,7 @@ describe('damper entity state', () => {
     expect(model('cover.room', 'open', { current_position: 35, supported_features: 7 })).toMatchObject({ position: .35, value: 35, canSetPosition: true, canOpen: true, canClose: true });
     expect(model('cover.room', 'open', { supported_features: 3 })).toMatchObject({ position: null, value: null, canSetPosition: false, canOpen: true, canClose: true });
     expect(model('cover.room', 'open', { current_position: null })).toMatchObject({ position: null });
+    expect(model('cover.room', 'closed', { current_position: 0, supported_features: 3 })).toMatchObject({ position: 0, canSetPosition: false, canOpen: true, canClose: true });
     expect(model('cover.room', 'open', { current_position: ' ' })).toMatchObject({ position: null });
     expect(model('cover.room', 'invalid')).toMatchObject({ available: false });
   });
@@ -67,6 +68,12 @@ describe('damper integration', () => {
     card.hass = { ...card._hass, states: { ...card._hass.states, 'select.room': { state: 'medium', attributes: { options: ['low', 'medium', 'high'] } } } };
     expect(card.shadowRoot.querySelector('.hac-damper-value').textContent).toBe('medium');
     expect(card.shadowRoot.querySelectorAll('.hac-damper-vmark')).toHaveLength(3);
+  });
+  it('uses open/close actions when a binary cover reports current_position without SET_POSITION support', async () => {
+    const card = setup('cover.room', 'closed', { current_position: 0, supported_features: 3 });
+    await card._commitDamper('cover.room', 1);
+    expect(card._hass.callService).toHaveBeenCalledWith('cover', 'open_cover', { entity_id: 'cover.room' });
+    expect(card._hass.callService).not.toHaveBeenCalledWith('cover', 'set_cover_position', expect.anything());
   });
   it('aligns each select V pair with the illuminated fill position', () => {
     for (const [index, value] of ['low', 'medium', 'high'].entries()) {

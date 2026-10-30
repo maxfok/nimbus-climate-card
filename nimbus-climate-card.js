@@ -337,13 +337,13 @@ const CSS = `
   .hac-damper-track { position:relative; height:22px; border-radius:14px; border:1px solid var(--line-2); background:linear-gradient(180deg,rgba(0,0,0,.65) 0%,rgba(255,255,255,.08) 45%,rgba(0,0,0,.5) 100%); box-shadow:inset 0 1px 3px rgba(255,255,255,.13),inset 0 -2px 4px rgba(0,0,0,.65),0 1px 0 rgba(255,255,255,.04); overflow:visible; }
   .hac-damper-fill { position:absolute; inset:2px auto 2px 2px; width:calc(var(--position) - 4px); max-width:calc(100% - 4px); border-radius:inherit; background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 70%,white 30%) 0%,var(--accent) 40%,color-mix(in srgb,var(--accent) 60%,transparent) 100%); box-shadow:0 0 10px var(--glow),inset 0 1px rgba(255,255,255,.25); transition:width .18s ease; }
   .hac-damper[data-damper-domain="switch"] .hac-damper-fill { left:var(--switch-start); width:calc(50% - 4px); transition:left .18s ease; }
-  .hac-damper-range { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; touch-action:pan-y; }
+  .hac-damper-range { position:absolute; inset:-5px 0 auto; width:100%; height:44px; margin:0; opacity:0; cursor:pointer; touch-action:pan-y; }
   .hac-damper-range:focus-visible + .hac-damper-outline { position:absolute; inset:2px -3px; border:2px solid var(--accent); border-radius:13px; pointer-events:none; }
   .hac-damper-ticks { position:absolute; inset:4px 0 auto; height:24px; pointer-events:none; }
   .hac-damper-tick { position:absolute; left:var(--tick); top:0; bottom:0; width:1px; background:var(--ink-2); opacity:.55; }
   .hac-damper-select-area { position:absolute; inset:0 2px; border-radius:inherit; }
   .hac-damper-select-area .hac-damper-fill { left:0; width:var(--position); max-width:100%; }
-  .hac-damper-select-area .hac-damper-range { -webkit-appearance:none; appearance:none; inset:-6px 0; width:100%; height:calc(100% + 12px); }
+  .hac-damper-select-area .hac-damper-range { -webkit-appearance:none; appearance:none; inset:-11px 0 auto; width:100%; height:44px; }
   .hac-damper-select-area .hac-damper-range::-webkit-slider-thumb { -webkit-appearance:none; width:0; height:0; }
   .hac-damper-select-area .hac-damper-range::-moz-range-thumb { width:0; height:0; border:0; }
   .hac-damper-vmark { position:absolute; left:var(--tick); top:0; bottom:0; width:0; pointer-events:none; }
