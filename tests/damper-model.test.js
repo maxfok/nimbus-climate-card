@@ -62,33 +62,39 @@ describe('damper integration', () => {
     const card = setup('select.room', 'low', { options: ['low', 'high'] });
     card.hass = { ...card._hass, states: { ...card._hass.states, 'select.room': { state: 'medium', attributes: { options: ['low', 'medium', 'high'] } } } };
     expect(card.shadowRoot.querySelector('.hac-damper-value').textContent).toBe('medium');
-    expect(card.shadowRoot.querySelectorAll('.hac-damper-tick')).toHaveLength(3);
+    expect(card.shadowRoot.querySelectorAll('.hac-damper-vmark')).toHaveLength(3);
   });
-  it('aligns each select marker with its evenly spaced option tick', () => {
+  it('aligns each select V pair with the illuminated fill position', () => {
     for (const [index, value] of ['low', 'medium', 'high'].entries()) {
       const card = setup('select.room', value, { options: ['low', 'medium', 'high'] });
-      const ticks = [...card.shadowRoot.querySelectorAll('.hac-damper-tick')];
-      const marker = card.shadowRoot.querySelector('.hac-damper-marker');
+      const ticks = [...card.shadowRoot.querySelectorAll('.hac-damper-vmark')];
+      const fill = card.shadowRoot.querySelector('.hac-damper-fill');
       expect(ticks).toHaveLength(3);
-      expect(ticks[index].style.getPropertyValue('--tick')).toBe(marker.style.getPropertyValue('--position'));
+      expect(ticks[index].style.getPropertyValue('--tick')).toBe(fill.style.getPropertyValue('--position'));
+      expect(card.shadowRoot.querySelector('.hac-damper-marker')).toBeNull();
       card.remove();
     }
   });
-  it.each([['off', '2px', '25%'], ['on', '50%', '75%']])('highlights only the %s switch half', (state, left, marker) => {
+  it.each([['off', '2px'], ['on', '50%']])('highlights only the %s switch half', (state, left) => {
     const card = setup('switch.room', state);
     const fill = card.shadowRoot.querySelector('.hac-damper-fill');
     expect(fill.style.getPropertyValue('--switch-start')).toBe(left);
-    expect(card.shadowRoot.querySelector('.hac-damper-marker').style.getPropertyValue('--position')).toBe(marker);
+    expect(card.shadowRoot.querySelector('.hac-damper-marker')).toBeNull();
     expect(card.shadowRoot.querySelector('.hac-damper-value').textContent).toBe('');
     expect(card.shadowRoot.querySelector('.hac-damper-labels').textContent).toBe('OFFON');
     expect(card.shadowRoot.querySelectorAll('.hac-damper-tick')).toHaveLength(0);
   });
-  it('moves the switch half and marker while previewing without dispatching a service', () => {
+  it('moves the switch half while previewing without dispatching a service', () => {
     const card = setup('switch.room', 'off'); const input = card.shadowRoot.querySelector('.hac-damper-range');
     input.value = '1000'; input.dispatchEvent(new Event('input', { bubbles: true }));
     expect(card.shadowRoot.querySelector('.hac-damper-fill').style.getPropertyValue('--switch-start')).toBe('50%');
-    expect(card.shadowRoot.querySelector('.hac-damper-marker').style.getPropertyValue('--position')).toBe('75%');
+    expect(card.shadowRoot.querySelector('.hac-damper-marker')).toBeNull();
     expect(card._hass.callService).not.toHaveBeenCalled();
+  });
+  it.each(['cover.room', 'number.room', 'select.room', 'switch.room'])('renders %s without an end indicator', id => {
+    const cases = { 'cover.room': ['open', { current_position: 30, supported_features: 7 }], 'number.room': ['30', { min: 0, max: 100, step: 1 }], 'select.room': ['low', { options: ['low', 'high'] }], 'switch.room': ['off', {}] };
+    const [state, attrs] = cases[id]; const card = setup(id, state, attrs);
+    expect(card.shadowRoot.querySelector('.hac-damper-marker')).toBeNull();
   });
   it('surfaces a failed service and returns to the reported value', async () => {
     const card = setup('number.room', '15', { min: 10, max: 30, step: 1 });
