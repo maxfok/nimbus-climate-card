@@ -1,7 +1,7 @@
-// Nimbus Climate Card v1.3.2.3
+// Nimbus Climate Card v1.3.3
 // A Home Assistant Lovelace card for climate entities
 
-const CARD_VERSION = '1.3.2.3';
+const CARD_VERSION = '1.3.3';
 const NIMBUS_GRID_ROW_HEIGHT = 56;
 const NIMBUS_GRID_ROW_GAP = 8;
 const NIMBUS_GRID_ROW_PADDING = 4;
@@ -336,7 +336,7 @@ const CSS = `
   .hac-damper-control { flex:1; min-width:0; position:relative; padding:6px 0; }
   .hac-damper-track { position:relative; height:22px; border-radius:14px; border:1px solid var(--line-2); background:linear-gradient(180deg,rgba(0,0,0,.65) 0%,rgba(255,255,255,.08) 45%,rgba(0,0,0,.5) 100%); box-shadow:inset 0 1px 3px rgba(255,255,255,.13),inset 0 -2px 4px rgba(0,0,0,.65),0 1px 0 rgba(255,255,255,.04); overflow:visible; }
   .hac-damper-fill { position:absolute; inset:2px auto 2px 2px; width:calc(var(--position) - 4px); max-width:calc(100% - 4px); border-radius:inherit; background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 70%,white 30%) 0%,var(--accent) 40%,color-mix(in srgb,var(--accent) 60%,transparent) 100%); box-shadow:0 0 10px var(--glow),inset 0 1px rgba(255,255,255,.25); transition:width .18s ease; }
-  .hac-damper[data-damper-domain="switch"] .hac-damper-fill { left:var(--switch-start); width:calc(50% - 4px); transition:left .18s ease; }
+  .hac-damper[data-damper-binary="true"] .hac-damper-fill { left:var(--switch-start); width:calc(50% - 4px); transition:left .18s ease; }
   .hac-damper-range { position:absolute; inset:-5px 0 auto; width:100%; height:44px; margin:0; opacity:0; cursor:pointer; touch-action:pan-y; }
   .hac-damper-range:focus-visible + .hac-damper-outline { position:absolute; inset:2px -3px; border:2px solid var(--accent); border-radius:13px; pointer-events:none; }
   .hac-damper-ticks { position:absolute; inset:4px 0 auto; height:24px; pointer-events:none; }
@@ -649,7 +649,7 @@ class NimbusClimateCard extends HTMLElement {
       model.value !== null ? `${model.value}%` : model.state;
     const pos = binaryCover ? (model.state === 'open' ? 1 : model.state === 'closed' ? 0 : null) : model.position ?? null;
     const shownPos = binary && pos !== null ? (pos >= .5 ? .75 : .25) : pos;
-    const ticks = (model.domain === 'switch' ? [] : options).map((option, i) => {
+    const ticks = (binary ? [] : options).map((option, i) => {
       const fraction = binary ? (i + .5) / 2 : options.length > 1 ? i / (options.length - 1) : 0;
       return `<span class="${model.domain === 'select' ? 'hac-damper-vmark' : 'hac-damper-tick'}" style="--tick:${fraction * 100}%"></span>`;
     }).join('');
@@ -658,14 +658,14 @@ class NimbusClimateCard extends HTMLElement {
       : `<span class="${model.available && pos !== null && (pos >= .5 ? 1 : 0) === i ? 'is-active' : ''}">${escapeHtml(option)}</span>`).join('');
     const rangeStep = binary ? 1000 : model.domain === 'select' && options.length > 1 ? 1000 / (options.length - 1) : model.domain === 'number' ? Math.min(1000, 1000 * model.step / (model.max - model.min)) : 10;
     const icon = SVG('M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 2v20M3 7l18 10M21 7 3 17');
-    const switchStart = model.domain === 'switch' && model.available ? (model.value === 'on' ? '50%' : '2px') : '2px';
-    const visibleValue = (model.domain === 'select' || model.domain === 'switch') && model.available ? '' : display;
-    const fill = `<div class="hac-damper-fill" style="--position:${(shownPos ?? 0) * 100}%;--switch-start:${switchStart};${model.domain === 'switch' && !model.available ? 'visibility:hidden;' : ''}"></div>`;
+    const switchStart = binary && pos !== null && pos >= .5 ? '50%' : '2px';
+    const visibleValue = (model.domain === 'select' || binary) && model.available && pos !== null ? '' : display;
+    const fill = `<div class="hac-damper-fill" style="--position:${(shownPos ?? 0) * 100}%;--switch-start:${switchStart};${binary && (!model.available || pos === null) ? 'visibility:hidden;' : ''}"></div>`;
     const input = `<input class="hac-damper-range" type="range" min="0" max="1000" step="${rangeStep || 1}" value="${(pos ?? 0) * 1000}" aria-label="Damper" aria-valuetext="${escapeHtml(display)}" ${canControl && !this._damperBusy ? '' : 'disabled'}><span class="hac-damper-outline"></span>`;
     const track = model.domain === 'select'
       ? `<div class="hac-damper-track"><div class="hac-damper-select-area">${fill}${ticks}${input}<div class="hac-damper-select-labels">${labels}</div></div></div><div class="hac-damper-select-spacer"></div>`
       : `<div class="hac-damper-track">${fill}</div><div class="hac-damper-ticks">${ticks}</div>${input}${labels ? `<div class="hac-damper-labels">${labels}</div>` : ''}`;
-    return `<div class="hac-damper" data-damper-domain="${model.domain}">
+    return `<div class="hac-damper" data-damper-domain="${model.domain}" data-damper-binary="${binary}">
       <span class="hac-damper-icon">${icon}</span><span class="hac-damper-name">Damper<span class="hac-damper-kind">(${model.domain})</span></span>
       <div class="hac-damper-control">${track}</div><span class="hac-damper-value">${escapeHtml(visibleValue)}</span>
     </div>${this._damperError ? `<div class="hac-damper-error" role="alert">${escapeHtml(this._damperError)}</div>` : ''}`;
@@ -1243,7 +1243,7 @@ class NimbusClimateCard extends HTMLElement {
         const fraction = Number(damperInput.value) / 1000;
         const shown = model?.domain === 'switch' || (model?.domain === 'cover' && !model.canSetPosition) ? (fraction >= .5 ? .75 : .25) : model?.domain === 'select' && model.options?.length > 1 ? Math.round(fraction * (model.options.length - 1)) / (model.options.length - 1) : fraction;
         const container = damperInput.closest('.hac-damper');
-        if (model?.domain !== 'switch') container.querySelector('.hac-damper-fill')?.style.setProperty('--position', `${shown * 100}%`);
+        if (!(model?.domain === 'switch' || (model?.domain === 'cover' && !model.canSetPosition))) container.querySelector('.hac-damper-fill')?.style.setProperty('--position', `${shown * 100}%`);
       });
       damperInput.addEventListener('change', () => {
         if (pointerSequence || cancelled) return;

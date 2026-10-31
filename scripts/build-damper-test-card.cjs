@@ -14,7 +14,7 @@ const replace = (from, to, expected) => {
 replace('nimbus-climate-card-editor', 'nimbus-climate-damper-test-card-editor', 2);
 replace("'nimbus-climate-card'", "'nimbus-climate-damper-test-card'", 3);
 replace('__nimbusClimateRows', '__nimbusClimateDamperTestRows', 3);
-replace("const CARD_VERSION = '1.3.2.3';", "const CARD_VERSION = '1.3.2.3-damper-test';", 1);
+replace("const CARD_VERSION = '1.3.3';", "const CARD_VERSION = '1.3.3-damper-test';", 1);
 replace("name: 'Nimbus Climate Card',", "name: 'Nimbus Climate Card — Damper Test',", 1);
 fs.writeFileSync(output, code);
 console.log(`Built isolated test card: ${output}`);

@@ -72,7 +72,10 @@ describe('damper integration', () => {
   });
   it.each([['closed', 100, 'CLOSED'], ['open', 0, 'OPEN']])('shows binary cover %s state without a synthetic percentage', (state, position, label) => {
     const card = setup('cover.room', state, { current_position: position, supported_features: 3 });
-    expect(card.shadowRoot.querySelector('.hac-damper-value').textContent).toBe(label);
+    expect(card.shadowRoot.querySelector('.hac-damper-value').textContent).toBe('');
+    expect(card.shadowRoot.querySelector('.hac-damper').dataset.damperBinary).toBe('true');
+    expect(card.shadowRoot.querySelector('.hac-damper-fill').style.getPropertyValue('--switch-start')).toBe(state === 'open' ? '50%' : '2px');
+    expect(card.shadowRoot.querySelectorAll('.hac-damper-tick')).toHaveLength(0);
     expect(card.shadowRoot.querySelector('.hac-damper-labels .is-active').textContent).toBe(label);
     expect(card.shadowRoot.querySelector('.hac-damper-range').getAttribute('aria-valuetext')).toBe(label);
   });
