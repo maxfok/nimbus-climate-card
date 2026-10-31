@@ -352,6 +352,7 @@ const CSS = `
   .hac-damper-vmark::after { bottom:-6px; transform:rotate(225deg); }
   .hac-damper-select-labels { position:absolute; inset:calc(100% + 5px) 0 auto; height:12px; font-size:10px; line-height:1.2; color:var(--ink-3); pointer-events:none; }
   .hac-damper-select-labels span { position:absolute; left:var(--tick); transform:translateX(-50%); white-space:nowrap; max-width:var(--label-width); overflow:hidden; text-overflow:ellipsis; text-align:center; }
+  .hac-damper-select-labels .is-active, .hac-damper-labels .is-active { color:var(--accent); }
   .hac-damper-select-spacer { height:17px; }
   .hac-damper-labels { display:flex; justify-content:space-between; gap:2px; padding-top:5px; font-size:10px; line-height:1.2; color:var(--ink-3); overflow:hidden; }
   .hac-damper-labels span { flex:1; min-width:0; overflow:hidden; text-align:center; text-overflow:ellipsis; white-space:nowrap; }
@@ -641,24 +642,24 @@ class NimbusClimateCard extends HTMLElement {
     if (!model) return '';
     const binaryCover = model.domain === 'cover' && !model.canSetPosition;
     const binary = binaryCover || model.domain === 'switch';
-    const options = model.domain === 'select' ? model.options || [] : binary ? ['OFF', 'ON'] : [];
+    const options = model.domain === 'select' ? model.options || [] : binary ? (binaryCover ? ['CLOSED', 'OPEN'] : ['OFF', 'ON']) : [];
     const canControl = model.available && (model.domain !== 'cover' || model.canSetPosition || model.canOpen || model.canClose);
     const display = !model.available ? 'Unavailable' : model.domain === 'number' ? `${model.value}${model.unit ? ' ' + model.unit : ''}` :
-      model.domain === 'select' ? model.value : model.domain === 'switch' ? model.value.toUpperCase() :
+      model.domain === 'select' ? model.value : model.domain === 'switch' ? model.value.toUpperCase() : binaryCover ? model.state.toUpperCase() :
       model.value !== null ? `${model.value}%` : model.state;
-    const pos = binaryCover && model.position === null ? (model.state === 'open' ? 1 : model.state === 'closed' ? 0 : null) : model.position ?? null;
+    const pos = binaryCover ? (model.state === 'open' ? 1 : model.state === 'closed' ? 0 : null) : model.position ?? null;
     const shownPos = binary && pos !== null ? (pos >= .5 ? .75 : .25) : pos;
     const ticks = (model.domain === 'switch' ? [] : options).map((option, i) => {
       const fraction = binary ? (i + .5) / 2 : options.length > 1 ? i / (options.length - 1) : 0;
       return `<span class="${model.domain === 'select' ? 'hac-damper-vmark' : 'hac-damper-tick'}" style="--tick:${fraction * 100}%"></span>`;
     }).join('');
     const labels = options.map((option, i) => model.domain === 'select'
-      ? `<span style="--tick:${options.length > 1 ? i / (options.length - 1) * 100 : 0}%;--label-width:${100 / Math.max(options.length, 1)}%">${escapeHtml(option)}</span>`
-      : `<span>${escapeHtml(option)}</span>`).join('');
+      ? `<span class="${model.available && i === model.index ? 'is-active' : ''}" style="--tick:${options.length > 1 ? i / (options.length - 1) * 100 : 0}%;--label-width:${100 / Math.max(options.length, 1)}%">${escapeHtml(option)}</span>`
+      : `<span class="${model.available && pos !== null && (pos >= .5 ? 1 : 0) === i ? 'is-active' : ''}">${escapeHtml(option)}</span>`).join('');
     const rangeStep = binary ? 1000 : model.domain === 'select' && options.length > 1 ? 1000 / (options.length - 1) : model.domain === 'number' ? Math.min(1000, 1000 * model.step / (model.max - model.min)) : 10;
     const icon = SVG('M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 2v20M3 7l18 10M21 7 3 17');
     const switchStart = model.domain === 'switch' && model.available ? (model.value === 'on' ? '50%' : '2px') : '2px';
-    const visibleValue = model.domain === 'switch' && model.available ? '' : display;
+    const visibleValue = (model.domain === 'select' || model.domain === 'switch') && model.available ? '' : display;
     const fill = `<div class="hac-damper-fill" style="--position:${(shownPos ?? 0) * 100}%;--switch-start:${switchStart};${model.domain === 'switch' && !model.available ? 'visibility:hidden;' : ''}"></div>`;
     const input = `<input class="hac-damper-range" type="range" min="0" max="1000" step="${rangeStep || 1}" value="${(pos ?? 0) * 1000}" aria-label="Damper" aria-valuetext="${escapeHtml(display)}" ${canControl && !this._damperBusy ? '' : 'disabled'}><span class="hac-damper-outline"></span>`;
     const track = model.domain === 'select'
@@ -1205,33 +1206,50 @@ class NimbusClimateCard extends HTMLElement {
     const damperInput = this.shadowRoot.querySelector('.hac-damper-range');
     if (damperInput) {
       const entityId = this._config.entities[this._activeIdx]?.damper_entity;
-      let pointerSequence = false, pointerChanged = false, changeHandled = false, fallbackValue = null;
-      damperInput.addEventListener('pointerdown', event => { pointerSequence = true; pointerChanged = false; changeHandled = false; fallbackValue = null; this._damperInteracting = true; damperInput.setPointerCapture?.(event.pointerId); });
+      let pointerSequence = false, pointerChanged = false, fallbackValue = null, keyboardSequence = false, cancelled = false;
       const finish = () => {
         this._damperInteracting = false;
         if (this._damperRefreshPending) { this._damperRefreshPending = false; this._render(); }
       };
-      damperInput.addEventListener('pointercancel', () => { pointerSequence = false; this._damperRefreshPending = true; finish(); });
-      damperInput.addEventListener('lostpointercapture', () => { if (!pointerSequence) finish(); });
-      damperInput.addEventListener('pointerup', () => { queueMicrotask(() => {
-        if (pointerChanged && !changeHandled) {
-          fallbackValue = damperInput.value;
-          this._commitDamper(entityId, Number(damperInput.value) / 1000);
+      const cancel = () => {
+        if (!pointerSequence) return;
+        pointerSequence = false; cancelled = true; this._damperRefreshPending = true; finish();
+      };
+      damperInput.addEventListener('pointerdown', event => {
+        if (event.button != null && event.button !== 0) return;
+        pointerSequence = true; pointerChanged = false; keyboardSequence = false; cancelled = false; fallbackValue = null;
+        this._damperInteracting = true;
+      });
+      damperInput.addEventListener('pointercancel', cancel);
+      damperInput.addEventListener('lostpointercapture', cancel);
+      damperInput.addEventListener('pointerup', () => {
+        if (!pointerSequence) return;
+        pointerSequence = false;
+        const value = damperInput.value;
+        queueMicrotask(() => {
+          if (pointerChanged && !cancelled) { fallbackValue = value; this._commitDamper(entityId, Number(value) / 1000); }
+          finish();
+        });
+      });
+      damperInput.addEventListener('keydown', event => {
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) {
+          keyboardSequence = true; cancelled = false; fallbackValue = null;
         }
-        pointerSequence = false; finish();
-      }); });
+      });
       damperInput.addEventListener('input', () => {
+        if (!pointerSequence && !keyboardSequence) return;
         if (pointerSequence) pointerChanged = true;
         const model = this._getDamperModel(entityId);
         const fraction = Number(damperInput.value) / 1000;
         const shown = model?.domain === 'switch' || (model?.domain === 'cover' && !model.canSetPosition) ? (fraction >= .5 ? .75 : .25) : model?.domain === 'select' && model.options?.length > 1 ? Math.round(fraction * (model.options.length - 1)) / (model.options.length - 1) : fraction;
         const container = damperInput.closest('.hac-damper');
-        container.querySelector('.hac-damper-fill')?.style.setProperty('--position', `${shown * 100}%`);
-        if (model?.domain === 'switch') container.querySelector('.hac-damper-fill')?.style.setProperty('--switch-start', fraction >= .5 ? '50%' : '2px');
+        if (model?.domain !== 'switch') container.querySelector('.hac-damper-fill')?.style.setProperty('--position', `${shown * 100}%`);
       });
       damperInput.addEventListener('change', () => {
-        changeHandled = true;
+        if (pointerSequence || cancelled) return;
         if (fallbackValue === damperInput.value) { fallbackValue = null; return; }
+        if (!keyboardSequence) return;
+        keyboardSequence = false;
         this._commitDamper(entityId, Number(damperInput.value) / 1000);
       });
     }

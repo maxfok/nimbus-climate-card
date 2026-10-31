@@ -66,8 +66,31 @@ describe('damper integration', () => {
   it('reflects external updates and dynamic options', () => {
     const card = setup('select.room', 'low', { options: ['low', 'high'] });
     card.hass = { ...card._hass, states: { ...card._hass.states, 'select.room': { state: 'medium', attributes: { options: ['low', 'medium', 'high'] } } } };
-    expect(card.shadowRoot.querySelector('.hac-damper-value').textContent).toBe('medium');
+    expect(card.shadowRoot.querySelector('.hac-damper-select-labels .is-active').textContent).toBe('medium');
+    expect(card.shadowRoot.querySelector('.hac-damper-value').textContent).toBe('');
     expect(card.shadowRoot.querySelectorAll('.hac-damper-vmark')).toHaveLength(3);
+  });
+  it.each([['closed', 100, 'CLOSED'], ['open', 0, 'OPEN']])('shows binary cover %s state without a synthetic percentage', (state, position, label) => {
+    const card = setup('cover.room', state, { current_position: position, supported_features: 3 });
+    expect(card.shadowRoot.querySelector('.hac-damper-value').textContent).toBe(label);
+    expect(card.shadowRoot.querySelector('.hac-damper-labels .is-active').textContent).toBe(label);
+    expect(card.shadowRoot.querySelector('.hac-damper-range').getAttribute('aria-valuetext')).toBe(label);
+  });
+  it.each([
+    ['cover.room', 'open', {current_position: 20, supported_features: 7}],
+    ['number.room', '20', {min: 0, max: 100, step: 1}],
+    ['select.room', 'low', {options: ['low', 'high']}],
+    ['switch.room', 'off', {}],
+  ])('ignores hover input and change without a pressed pointer for %s', (id, state, attrs) => {
+    const card = setup(id, state, attrs); const input = card.shadowRoot.querySelector('.hac-damper-range');
+    const fill = card.shadowRoot.querySelector('.hac-damper-fill'); const before = fill.getAttribute('style');
+    input.dispatchEvent(new Event('pointermove')); input.value = '1000'; input.dispatchEvent(new Event('input')); input.dispatchEvent(new Event('change'));
+    expect(fill.getAttribute('style')).toBe(before); expect(card._hass.callService).not.toHaveBeenCalled();
+  });
+  it('commits keyboard range changes independently of pointer gestures', () => {
+    const card = setup('switch.room', 'off'); const input = card.shadowRoot.querySelector('.hac-damper-range');
+    input.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight'})); input.value = '1000'; input.dispatchEvent(new Event('input')); input.dispatchEvent(new Event('change'));
+    expect(card._hass.callService).toHaveBeenCalledWith('switch', 'turn_on', {entity_id:'switch.room'});
   });
   it('uses open/close actions when a binary cover reports current_position without SET_POSITION support', async () => {
     const card = setup('cover.room', 'closed', { current_position: 0, supported_features: 3 });
@@ -97,6 +120,8 @@ describe('damper integration', () => {
       const position = `${fraction * 100}%`;
       expect(markers[index].style.getPropertyValue('--tick')).toBe(position);
       expect(labels[index].style.getPropertyValue('--tick')).toBe(position);
+      expect(labels[index].classList.contains('is-active')).toBe(true);
+      expect(labels.filter(label => label.classList.contains('is-active'))).toHaveLength(1);
       expect(area.querySelector('.hac-damper-fill').style.getPropertyValue('--position')).toBe(position);
       expect(Number(area.querySelector('.hac-damper-range').value)).toBeCloseTo(fraction * 1000, 6);
       const next = (index + 1) % count;
@@ -113,12 +138,13 @@ describe('damper integration', () => {
     expect(card.shadowRoot.querySelector('.hac-damper-marker')).toBeNull();
     expect(card.shadowRoot.querySelector('.hac-damper-value').textContent).toBe('');
     expect(card.shadowRoot.querySelector('.hac-damper-labels').textContent).toBe('OFFON');
+    expect(card.shadowRoot.querySelector('.hac-damper-labels .is-active').textContent).toBe(state.toUpperCase());
     expect(card.shadowRoot.querySelectorAll('.hac-damper-tick')).toHaveLength(0);
   });
-  it('moves the switch half while previewing without dispatching a service', () => {
+  it('keeps the switch half on the actual state while dragging', () => {
     const card = setup('switch.room', 'off'); const input = card.shadowRoot.querySelector('.hac-damper-range');
-    input.value = '1000'; input.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(card.shadowRoot.querySelector('.hac-damper-fill').style.getPropertyValue('--switch-start')).toBe('50%');
+    input.dispatchEvent(new Event('pointerdown')); input.value = '1000'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(card.shadowRoot.querySelector('.hac-damper-fill').style.getPropertyValue('--switch-start')).toBe('2px');
     expect(card.shadowRoot.querySelector('.hac-damper-marker')).toBeNull();
     expect(card._hass.callService).not.toHaveBeenCalled();
   });
@@ -144,10 +170,12 @@ describe('damper integration', () => {
   it('sends no services while moving, and one on change', async () => {
     const card = setup('number.room', '10', { min: 10, max: 30, step: 2 });
     const input = card.shadowRoot.querySelector('.hac-damper-range');
-    input.value = '500'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('pointerdown')); input.value = '500'; input.dispatchEvent(new Event('input', { bubbles: true }));
     input.value = '700'; input.dispatchEvent(new Event('input', { bubbles: true }));
     expect(card._hass.callService).not.toHaveBeenCalled();
     input.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(card._hass.callService).not.toHaveBeenCalled();
+    input.dispatchEvent(new Event('pointerup'));
     await Promise.resolve();
     expect(card._hass.callService).toHaveBeenCalledTimes(1);
     expect(card._hass.callService).toHaveBeenCalledWith('number', 'set_value', { entity_id: 'number.room', value: 24 });
@@ -176,6 +204,17 @@ describe('damper integration', () => {
     expect(card._hass.callService).toHaveBeenCalledWith(domain, service, { entity_id: id, ...extra });
     input.dispatchEvent(new Event('change'));
     expect(card._hass.callService).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    ['cover.room', 'open', {current_position: 20, supported_features: 7}],
+    ['number.room', '20', {min: 0, max: 100, step: 1}],
+    ['select.room', 'low', {options: ['low', 'high']}],
+    ['switch.room', 'off', {}],
+  ])('does not commit a cancelled touch gesture for %s', (id, state, attrs) => {
+    const card = setup(id, state, attrs); const input = card.shadowRoot.querySelector('.hac-damper-range');
+    input.dispatchEvent(new Event('pointerdown')); input.value = '1000'; input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new Event('change')); input.dispatchEvent(new Event('pointercancel')); input.dispatchEvent(new Event('pointerup')); input.dispatchEvent(new Event('change'));
+    expect(card._hass.callService).not.toHaveBeenCalled();
   });
   it('restores actual feedback when a drag is cancelled', () => {
     const card = setup('number.room', '20', { min: 0, max: 100, step: 1 });
