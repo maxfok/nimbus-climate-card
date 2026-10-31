@@ -1,7 +1,7 @@
-// Nimbus Climate Card v1.3.2.3
+// Nimbus Climate Card v1.3.3
 // A Home Assistant Lovelace card for climate entities
 
-const CARD_VERSION = '1.3.2.3';
+const CARD_VERSION = '1.3.3';
 const NIMBUS_GRID_ROW_HEIGHT = 56;
 const NIMBUS_GRID_ROW_GAP = 8;
 const NIMBUS_GRID_ROW_PADDING = 4;
@@ -328,6 +328,37 @@ const CSS = `
   .hac-extras {
     display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
   }
+  .hac-damper { display:flex; align-items:center; gap:10px; padding:10px 12px; margin:0 0 8px; min-width:0; container-type:inline-size; border:1px solid var(--line); border-radius:11px; background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01)); color:var(--ink-2); }
+  .hac-damper-icon { width:26px; height:26px; flex:none; color:var(--ink-2); }
+  .hac-damper-icon svg { display:block; width:100%; height:100%; }
+  .hac-damper-name { min-width:52px; font-size:12px; line-height:1.2; color:var(--ink); }
+  .hac-damper-kind { display:block; color:var(--ink-3); font-size:10px; }
+  .hac-damper-control { flex:1; min-width:0; position:relative; padding:6px 0; }
+  .hac-damper-track { position:relative; height:22px; border-radius:14px; border:1px solid var(--line-2); background:linear-gradient(180deg,rgba(0,0,0,.65) 0%,rgba(255,255,255,.08) 45%,rgba(0,0,0,.5) 100%); box-shadow:inset 0 1px 3px rgba(255,255,255,.13),inset 0 -2px 4px rgba(0,0,0,.65),0 1px 0 rgba(255,255,255,.04); overflow:visible; }
+  .hac-damper-fill { position:absolute; inset:2px auto 2px 2px; width:calc(var(--position) - 4px); max-width:calc(100% - 4px); border-radius:inherit; background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 70%,white 30%) 0%,var(--accent) 40%,color-mix(in srgb,var(--accent) 60%,transparent) 100%); box-shadow:0 0 10px var(--glow),inset 0 1px rgba(255,255,255,.25); transition:width .18s ease; }
+  .hac-damper[data-damper-binary="true"] .hac-damper-fill { left:var(--switch-start); width:calc(50% - 4px); transition:left .18s ease; }
+  .hac-damper-range { position:absolute; inset:-5px 0 auto; width:100%; height:44px; margin:0; opacity:0; cursor:pointer; touch-action:pan-y; }
+  .hac-damper-range:focus-visible + .hac-damper-outline { position:absolute; inset:2px -3px; border:2px solid var(--accent); border-radius:13px; pointer-events:none; }
+  .hac-damper-ticks { position:absolute; inset:4px 0 auto; height:24px; pointer-events:none; }
+  .hac-damper-tick { position:absolute; left:var(--tick); top:0; bottom:0; width:1px; background:var(--ink-2); opacity:.55; }
+  .hac-damper-select-area { position:absolute; inset:0 2px; border-radius:inherit; }
+  .hac-damper-select-area .hac-damper-fill { left:0; width:var(--position); max-width:100%; }
+  .hac-damper-select-area .hac-damper-range { -webkit-appearance:none; appearance:none; inset:-11px 0 auto; width:100%; height:44px; }
+  .hac-damper-select-area .hac-damper-range::-webkit-slider-thumb { -webkit-appearance:none; width:0; height:0; }
+  .hac-damper-select-area .hac-damper-range::-moz-range-thumb { width:0; height:0; border:0; }
+  .hac-damper-vmark { position:absolute; left:var(--tick); top:0; bottom:0; width:0; pointer-events:none; }
+  .hac-damper-vmark::before, .hac-damper-vmark::after { content:''; position:absolute; left:-2px; width:3px; height:3px; border-right:1px solid rgba(165,165,165,.68); border-bottom:1px solid rgba(165,165,165,.68); filter:drop-shadow(0 1px 0 rgba(0,0,0,.85)); }
+  .hac-damper-vmark::before { top:-6px; transform:rotate(45deg); }
+  .hac-damper-vmark::after { bottom:-6px; transform:rotate(225deg); }
+  .hac-damper-select-labels { position:absolute; inset:calc(100% + 5px) 0 auto; height:12px; font-size:10px; line-height:1.2; color:var(--ink-3); pointer-events:none; }
+  .hac-damper-select-labels span { position:absolute; left:var(--tick); transform:translateX(-50%); white-space:nowrap; max-width:var(--label-width); overflow:hidden; text-overflow:ellipsis; text-align:center; }
+  .hac-damper-select-labels .is-active, .hac-damper-labels .is-active { color:var(--accent); }
+  .hac-damper-select-spacer { height:17px; }
+  .hac-damper-labels { display:flex; justify-content:space-between; gap:2px; padding-top:5px; font-size:10px; line-height:1.2; color:var(--ink-3); overflow:hidden; }
+  .hac-damper-labels span { flex:1; min-width:0; overflow:hidden; text-align:center; text-overflow:ellipsis; white-space:nowrap; }
+  .hac-damper-value { flex:none; max-width:32%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+  .hac-damper-error { color:var(--ink-2); font-size:11px; margin:0 0 8px; }
+  @container (max-width: 300px) { .hac-damper[data-damper-domain="select"] .hac-damper-control { margin-left:8px; } }
   .hac-extra {
     flex: 1; min-width: 80px;
     appearance: none; cursor: pointer;
@@ -382,6 +413,41 @@ const CSS = `
 const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
 
 const _safeNum = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+
+// Convert the reported HA state into one visual range without inventing feedback.
+function _damperModel(entityId, entity) {
+  const domain = String(entityId || '').split('.')[0];
+  if (!['cover', 'number', 'select', 'switch'].includes(domain)) return null;
+  const state = entity?.state;
+  const attrs = entity?.attributes || {};
+  if (!entity || state == null || String(state).trim() === '' || ['unknown', 'unavailable'].includes(state)) return { domain, available: false };
+  if (domain === 'cover') {
+    if (!['open', 'closed', 'opening', 'closing'].includes(state)) return { domain, available: false };
+    const features = Number(attrs.supported_features) || 0;
+    const raw = attrs.current_position;
+    const position = raw === null || raw === undefined || String(raw).trim() === '' ? NaN : Number(raw);
+    const validPosition = Number.isFinite(position) && position >= 0 && position <= 100;
+    return { domain, available: true, position: validPosition ? position / 100 : null,
+      value: validPosition ? position : null, canSetPosition: !!(features & 4),
+      canOpen: !!(features & 1), canClose: !!(features & 2), state };
+  }
+  if (domain === 'number') {
+    const min = Number(attrs.min), max = Number(attrs.max), step = Number(attrs.step), value = Number(state);
+    if ([attrs.min, attrs.max, attrs.step, state].some(x => x === null || x === undefined || String(x).trim() === '') ||
+        ![min, max, step, value].every(Number.isFinite) || max <= min || step <= 0 || value < min || value > max) {
+      return { domain, available: false };
+    }
+    return { domain, available: true, min, max, step, value, unit: attrs.unit_of_measurement || '', position: (value - min) / (max - min) };
+  }
+  if (domain === 'select') {
+    const options = Array.isArray(attrs.options) ? attrs.options.filter(x => typeof x === 'string') : [];
+    const index = options.indexOf(state);
+    if (!options.length || index < 0) return { domain, available: false };
+    return { domain, available: true, options, value: state, index, position: options.length === 1 ? 0 : index / (options.length - 1) };
+  }
+  if (!['on', 'off'].includes(state)) return { domain, available: false };
+  return { domain, available: true, value: state, position: state === 'on' ? 1 : 0 };
+}
 
 const _historyTimeMs = (row) => {
   const raw = row?.lu ?? row?.last_updated ?? row?.last_changed;
@@ -543,13 +609,15 @@ class NimbusClimateCard extends HTMLElement {
           a.current_temperature, a.temperature, a.hvac_action,
           a.fan_mode, a.swing_mode, a.swing_horizontal_mode, a.preset_mode, a.current_humidity,
           JSON.stringify([a.fan_modes, a.swing_modes, a.swing_horizontal_modes, a.preset_modes]),
+          e.damper_entity ? JSON.stringify(hass.states[e.damper_entity] ?? null) : '',
           e.outdoor_sensor ? hass.states[e.outdoor_sensor]?.state : ''
         ].join(':');
       }).join('|');
     })();
     if (fp !== this._lastFP) {
       this._lastFP = fp;
-      this._render();
+      if (this._damperInteracting) this._damperRefreshPending = true;
+      else this._render();
     }
     if (this._config.entities) {
       const e = this._config.entities[this._activeIdx]?.entity;
@@ -562,6 +630,72 @@ class NimbusClimateCard extends HTMLElement {
 
   _getTempUnit() {
     return this._hass?.config?.unit_system?.temperature || '°C';
+  }
+
+  _getDamperModel(entityId) {
+    return _damperModel(entityId, this._hass?.states?.[entityId]);
+  }
+
+  _renderDamper(entityId) {
+    if (!entityId) return '';
+    const model = this._getDamperModel(entityId);
+    if (!model) return '';
+    const binaryCover = model.domain === 'cover' && !model.canSetPosition;
+    const binary = binaryCover || model.domain === 'switch';
+    const options = model.domain === 'select' ? model.options || [] : binary ? (binaryCover ? ['CLOSED', 'OPEN'] : ['OFF', 'ON']) : [];
+    const canControl = model.available && (model.domain !== 'cover' || model.canSetPosition || model.canOpen || model.canClose);
+    const display = !model.available ? 'Unavailable' : model.domain === 'number' ? `${model.value}${model.unit ? ' ' + model.unit : ''}` :
+      model.domain === 'select' ? model.value : model.domain === 'switch' ? model.value.toUpperCase() : binaryCover ? model.state.toUpperCase() :
+      model.value !== null ? `${model.value}%` : model.state;
+    const pos = binaryCover ? (model.state === 'open' ? 1 : model.state === 'closed' ? 0 : null) : model.position ?? null;
+    const shownPos = binary && pos !== null ? (pos >= .5 ? .75 : .25) : pos;
+    const ticks = (binary ? [] : options).map((option, i) => {
+      const fraction = binary ? (i + .5) / 2 : options.length > 1 ? i / (options.length - 1) : 0;
+      return `<span class="${model.domain === 'select' ? 'hac-damper-vmark' : 'hac-damper-tick'}" style="--tick:${fraction * 100}%"></span>`;
+    }).join('');
+    const labels = options.map((option, i) => model.domain === 'select'
+      ? `<span class="${model.available && i === model.index ? 'is-active' : ''}" style="--tick:${options.length > 1 ? i / (options.length - 1) * 100 : 0}%;--label-width:${100 / Math.max(options.length, 1)}%">${escapeHtml(option)}</span>`
+      : `<span class="${model.available && pos !== null && (pos >= .5 ? 1 : 0) === i ? 'is-active' : ''}">${escapeHtml(option)}</span>`).join('');
+    const rangeStep = binary ? 1000 : model.domain === 'select' && options.length > 1 ? 1000 / (options.length - 1) : model.domain === 'number' ? Math.min(1000, 1000 * model.step / (model.max - model.min)) : 10;
+    const icon = SVG('M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 2v20M3 7l18 10M21 7 3 17');
+    const switchStart = binary && pos !== null && pos >= .5 ? '50%' : '2px';
+    const visibleValue = (model.domain === 'select' || binary) && model.available && pos !== null ? '' : display;
+    const fill = `<div class="hac-damper-fill" style="--position:${(shownPos ?? 0) * 100}%;--switch-start:${switchStart};${binary && (!model.available || pos === null) ? 'visibility:hidden;' : ''}"></div>`;
+    const input = `<input class="hac-damper-range" type="range" min="0" max="1000" step="${rangeStep || 1}" value="${(pos ?? 0) * 1000}" aria-label="Damper" aria-valuetext="${escapeHtml(display)}" ${canControl && !this._damperBusy ? '' : 'disabled'}><span class="hac-damper-outline"></span>`;
+    const track = model.domain === 'select'
+      ? `<div class="hac-damper-track"><div class="hac-damper-select-area">${fill}${ticks}${input}<div class="hac-damper-select-labels">${labels}</div></div></div><div class="hac-damper-select-spacer"></div>`
+      : `<div class="hac-damper-track">${fill}</div><div class="hac-damper-ticks">${ticks}</div>${input}${labels ? `<div class="hac-damper-labels">${labels}</div>` : ''}`;
+    return `<div class="hac-damper" data-damper-domain="${model.domain}" data-damper-binary="${binary}">
+      <span class="hac-damper-icon">${icon}</span><span class="hac-damper-name">Damper<span class="hac-damper-kind">(${model.domain})</span></span>
+      <div class="hac-damper-control">${track}</div><span class="hac-damper-value">${escapeHtml(visibleValue)}</span>
+    </div>${this._damperError ? `<div class="hac-damper-error" role="alert">${escapeHtml(this._damperError)}</div>` : ''}`;
+  }
+
+  async _commitDamper(entityId, fraction) {
+    if (this._damperBusy) return;
+    const m = this._getDamperModel(entityId);
+    if (!m?.available) return;
+    fraction = Math.max(0, Math.min(1, fraction));
+    let domain = m.domain, service, data = { entity_id: entityId };
+    if (domain === 'cover') {
+      if (m.canSetPosition) { service = 'set_cover_position'; data.position = Math.round(fraction * 100); if (m.value === data.position) return; }
+      else { const open = fraction >= .5; if ((open && !m.canOpen) || (!open && !m.canClose)) return; service = open ? 'open_cover' : 'close_cover'; }
+    } else if (domain === 'number') {
+      service = 'set_value';
+      const steps = Math.min(Math.floor((m.max - m.min) / m.step + 1e-9), Math.round(fraction * (m.max - m.min) / m.step));
+      data.value = Number((m.min + steps * m.step).toPrecision(12));
+      if (data.value === m.value) return;
+    } else if (domain === 'select') {
+      service = 'select_option'; data.option = m.options[Math.round(fraction * (m.options.length - 1))];
+      if (data.option === m.value) return;
+    } else {
+      const on = fraction >= .5; service = on ? 'turn_on' : 'turn_off';
+      if (m.value === (on ? 'on' : 'off')) return;
+    }
+    this._damperBusy = true; this._damperError = null;
+    try { await this._hass.callService(domain, service, data); }
+    catch (error) { this._damperError = `Damper control failed: ${error?.message || 'service error'}`; }
+    finally { this._damperBusy = false; if (this.isConnected) this._render(); }
   }
 
   _ensureActiveIndex() {
@@ -1034,6 +1168,7 @@ class NimbusClimateCard extends HTMLElement {
         </div>
       </div>
       <div class="hac-modes" style="grid-template-columns:repeat(${cols},1fr)">${modeButtons}</div>
+      ${this._renderDamper(this._config.entities[this._activeIdx]?.damper_entity)}
       ${extras.length ? `<div class="hac-extras">${extras.join('')}</div>` : ''}
     ` : `<div class="hac-unavailable">${t.ui.unavailable}</div>`;
 
@@ -1068,6 +1203,56 @@ class NimbusClimateCard extends HTMLElement {
     if (focusedControl) this.shadowRoot.querySelector(`button.hac-extra[data-service="${focusedControl}"]`)?.focus();
 
     // Events
+    const damperInput = this.shadowRoot.querySelector('.hac-damper-range');
+    if (damperInput) {
+      const entityId = this._config.entities[this._activeIdx]?.damper_entity;
+      let pointerSequence = false, pointerChanged = false, fallbackValue = null, keyboardSequence = false, cancelled = false;
+      const finish = () => {
+        this._damperInteracting = false;
+        if (this._damperRefreshPending) { this._damperRefreshPending = false; this._render(); }
+      };
+      const cancel = () => {
+        if (!pointerSequence) return;
+        pointerSequence = false; cancelled = true; this._damperRefreshPending = true; finish();
+      };
+      damperInput.addEventListener('pointerdown', event => {
+        if (event.button != null && event.button !== 0) return;
+        pointerSequence = true; pointerChanged = false; keyboardSequence = false; cancelled = false; fallbackValue = null;
+        this._damperInteracting = true;
+      });
+      damperInput.addEventListener('pointercancel', cancel);
+      damperInput.addEventListener('lostpointercapture', cancel);
+      damperInput.addEventListener('pointerup', () => {
+        if (!pointerSequence) return;
+        pointerSequence = false;
+        const value = damperInput.value;
+        queueMicrotask(() => {
+          if (pointerChanged && !cancelled) { fallbackValue = value; this._commitDamper(entityId, Number(value) / 1000); }
+          finish();
+        });
+      });
+      damperInput.addEventListener('keydown', event => {
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) {
+          keyboardSequence = true; cancelled = false; fallbackValue = null;
+        }
+      });
+      damperInput.addEventListener('input', () => {
+        if (!pointerSequence && !keyboardSequence) return;
+        if (pointerSequence) pointerChanged = true;
+        const model = this._getDamperModel(entityId);
+        const fraction = Number(damperInput.value) / 1000;
+        const shown = model?.domain === 'switch' || (model?.domain === 'cover' && !model.canSetPosition) ? (fraction >= .5 ? .75 : .25) : model?.domain === 'select' && model.options?.length > 1 ? Math.round(fraction * (model.options.length - 1)) / (model.options.length - 1) : fraction;
+        const container = damperInput.closest('.hac-damper');
+        if (!(model?.domain === 'switch' || (model?.domain === 'cover' && !model.canSetPosition))) container.querySelector('.hac-damper-fill')?.style.setProperty('--position', `${shown * 100}%`);
+      });
+      damperInput.addEventListener('change', () => {
+        if (pointerSequence || cancelled) return;
+        if (fallbackValue === damperInput.value) { fallbackValue = null; return; }
+        if (!keyboardSequence) return;
+        keyboardSequence = false;
+        this._commitDamper(entityId, Number(damperInput.value) / 1000);
+      });
+    }
     this.shadowRoot.querySelectorAll('.hac-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         this._selectTab(Number.parseInt(btn.dataset.idx, 10));
@@ -1267,6 +1452,7 @@ class NimbusClimateCardEditor extends HTMLElement {
           e.startsWith('sensor.') && this._hass.states[e].attributes?.device_class === 'temperature'
         ).sort()
       : [];
+    const damperEntities = Object.keys(this._hass?.states || {}).filter(id => /^(cover|number|select|switch)\./.test(id)).sort();
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -1326,6 +1512,14 @@ class NimbusClimateCardEditor extends HTMLElement {
                 <span class="field-label">Entity</span>
                 <select data-idx="${i}" data-field="entity">
                   ${climateEntities.map(ce => `<option value="${ce}" ${ce===e.entity?'selected':''}>${ce}</option>`).join('')}
+                </select>
+              </div>
+              <div class="field">
+                <span class="field-label">Damper entity (optional)</span>
+                <select data-idx="${i}" data-field="damper_entity">
+                  <option value="">— None —</option>
+                  ${e.damper_entity && !damperEntities.includes(e.damper_entity) ? `<option value="${escapeHtml(e.damper_entity)}" selected>${escapeHtml(e.damper_entity)}</option>` : ''}
+                  ${damperEntities.map(id => `<option value="${escapeHtml(id)}" ${id === e.damper_entity ? 'selected' : ''}>${escapeHtml(id)}</option>`).join('')}
                 </select>
               </div>
               <div class="field">
